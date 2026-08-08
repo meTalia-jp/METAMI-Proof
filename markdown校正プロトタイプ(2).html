@@ -1,0 +1,414 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<title>赤ペンProof — プロトタイプ</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Shippori+Mincho:wght@500;700&family=Zen+Kaku+Gothic+New:wght@400;500;700&family=JetBrains+Mono:wght@400;500&display=swap');
+
+:root{
+  --paper:#F6F2E7;
+  --grid:rgba(80,60,40,0.09);
+  --ink:#26282B;
+  --ink-soft:#5A5852;
+  --shu:#BE2A2C;
+  --shu-soft:#E8B9B4;
+  --ao:#1F4E8C;
+  --ao-soft:#C7D8EC;
+  --highlight:#F4D35E;
+  --sticky-y:#FCE38A;
+  --sticky-p:#F2B8C6;
+  --panel:#FFFDF7;
+  --line:#E4DCC8;
+  --shadow:0 2px 10px rgba(40,30,10,0.10);
+}
+*{box-sizing:border-box;}
+body{
+  margin:0;
+  font-family:'Zen Kaku Gothic New',sans-serif;
+  color:var(--ink);
+  background:var(--paper);
+}
+
+/* ===== Header ===== */
+header{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  padding:14px 24px;
+  background:var(--panel);
+  border-bottom:2px solid var(--ink);
+}
+.logo{
+  font-family:'Shippori Mincho',serif;
+  font-weight:700;
+  font-size:20px;
+  letter-spacing:.04em;
+  display:flex;
+  align-items:center;
+  gap:10px;
+}
+.logo .dot{width:10px;height:10px;border-radius:50%;background:var(--shu);}
+
+.tools{display:flex;gap:6px;align-items:center;}
+.tool-btn{
+  border:1.5px solid var(--line);
+  background:#fff;
+  border-radius:8px;
+  padding:7px 12px;
+  font-size:13px;
+  font-family:inherit;
+  cursor:pointer;
+  display:flex;
+  align-items:center;
+  gap:6px;
+  color:var(--ink-soft);
+  transition:.15s;
+}
+.tool-btn .sw{width:12px;height:12px;border-radius:50%;display:inline-block;}
+.tool-btn.active{border-color:var(--ink);color:var(--ink);background:#FBF7EC;font-weight:700;box-shadow:var(--shadow);}
+
+/* ===== reviewer initial tag ===== */
+.who-tag{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  min-width:16px;
+  height:16px;
+  padding:0 4px;
+  border-radius:4px;
+  font-size:9px;
+  font-weight:700;
+  font-family:'JetBrains Mono',monospace;
+  color:#fff;
+  vertical-align:middle;
+  margin:0 2px;
+  position:relative;
+  top:-1px;
+  white-space:nowrap;
+}
+
+.reviewer{
+  display:flex;align-items:center;gap:8px;font-size:13px;color:var(--ink-soft);
+}
+.avatar{
+  width:28px;height:28px;border-radius:50%;
+  display:flex;align-items:center;justify-content:center;
+  font-family:'Shippori Mincho',serif;font-weight:700;color:#fff;font-size:13px;
+  background:var(--shu);
+  border:2px solid #fff;box-shadow:0 0 0 1.5px var(--ink);
+}
+
+/* ===== Alert bar ===== */
+.alertbar{
+  display:flex;align-items:center;gap:10px;
+  background:#FCEFC7;
+  border-bottom:1px solid var(--line);
+  padding:8px 24px;
+  font-size:12.5px;
+  color:#6B4E14;
+}
+.alertbar b{color:var(--shu);}
+.alertbar .chip{
+  background:#fff;border:1px solid #E3C77E;border-radius:999px;
+  padding:2px 10px;font-size:11.5px;
+}
+
+/* ===== Layout ===== */
+.workspace{
+  display:grid;
+  grid-template-columns:1fr 1fr 240px;
+  gap:16px;
+  padding:18px 24px 32px;
+  align-items:start;
+}
+.pane{
+  background:
+    linear-gradient(var(--grid) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grid) 1px, transparent 1px),
+    var(--panel);
+  background-size:26px 26px;
+  border:1px solid var(--line);
+  border-radius:4px;
+  box-shadow:var(--shadow);
+  min-height:560px;
+  position:relative;
+  overflow:visible;
+}
+.pane-head{
+  font-family:'Shippori Mincho',serif;
+  font-size:13px;
+  font-weight:700;
+  padding:10px 18px;
+  border-bottom:1px solid var(--line);
+  background:rgba(255,255,255,0.75);
+  display:flex;justify-content:space-between;align-items:center;
+  letter-spacing:.05em;
+}
+.pane-head .tag{
+  font-family:'Zen Kaku Gothic New',sans-serif;
+  font-weight:500;
+  font-size:10.5px;
+  color:var(--ink-soft);
+  border:1px solid var(--line);
+  border-radius:999px;
+  padding:1px 8px;
+}
+.doc{
+  padding:20px 22px 40px;
+  font-size:14.5px;
+  line-height:2;
+  position:relative;
+}
+.doc h1{
+  font-family:'Shippori Mincho',serif;
+  font-size:19px;margin:0 0 14px;
+}
+.doc p{margin:0 0 14px;}
+.doc code{
+  font-family:'JetBrains Mono',monospace;
+  font-size:12.5px;
+  background:#F0ECDD;
+  padding:1px 5px;border-radius:3px;
+}
+
+/* --- annotation marks --- */
+.del{
+  color:var(--ink-soft);
+  position:relative;
+  text-decoration:line-through;
+  text-decoration-color:var(--shu);
+  text-decoration-thickness:1.5px;
+}
+.ins{
+  color:var(--shu);
+  font-weight:700;
+  position:relative;
+}
+.ins::before{content:"⌃";position:absolute;top:-13px;left:2px;font-size:11px;color:var(--shu);}
+.note-ao{
+  color:var(--ao);
+  border-bottom:2px solid var(--ao);
+  font-weight:500;
+}
+.hi{
+  background:linear-gradient(180deg, transparent 55%, var(--highlight) 55%);
+  padding:0 1px;
+}
+.circle{
+  position:relative;
+}
+.circle::after{
+  content:"";
+  position:absolute; left:-6px; right:-6px; top:-7px; bottom:-5px;
+  border:1.6px solid var(--shu);
+  border-radius:50% / 45%;
+  transform:rotate(-2deg);
+  pointer-events:none;
+}
+
+/* --- balloon --- */
+.balloon{
+  position:absolute;
+  background:#fff;
+  border:1.5px solid var(--shu);
+  border-radius:10px;
+  padding:8px 12px;
+  font-size:12px;
+  color:var(--shu);
+  box-shadow:var(--shadow);
+  max-width:190px;
+  line-height:1.5;
+}
+.balloon::before{
+  content:"";
+  position:absolute;
+  width:12px;height:12px;
+  background:#fff;
+  border-left:1.5px solid var(--shu);
+  border-bottom:1.5px solid var(--shu);
+  transform:rotate(45deg);
+}
+.balloon.b1{top:118px; left:-30px;}
+.balloon.b1::before{ top:-6px; left:24px; transform:rotate(135deg); border-left:none;border-bottom:none;border-top:1.5px solid var(--shu);border-right:1.5px solid var(--shu);}
+.balloon .who{font-family:'Shippori Mincho',serif;font-weight:700;font-size:11px;display:block;margin-bottom:2px;}
+
+/* --- sticky --- */
+.sticky{
+  position:absolute;
+  right:-26px;
+  width:120px;
+  padding:10px 10px 12px;
+  font-size:11.5px;
+  line-height:1.5;
+  box-shadow:0 4px 10px rgba(0,0,0,0.15);
+  font-family:'Zen Kaku Gothic New',sans-serif;
+  color:#3d3320;
+}
+.sticky.y{background:var(--sticky-y); transform:rotate(3deg); top:280px;}
+.sticky.p{background:var(--sticky-p); transform:rotate(-4deg); top:400px;}
+.sticky .who{
+  display:block;font-weight:700;font-size:10px;margin-bottom:4px;opacity:.7;
+}
+
+/* ===== Sidebar ===== */
+.sidebar{display:flex;flex-direction:column;gap:14px;}
+.side-card{
+  background:var(--panel);
+  border:1px solid var(--line);
+  border-radius:6px;
+  box-shadow:var(--shadow);
+  overflow:hidden;
+}
+.side-head{
+  font-family:'Shippori Mincho',serif;
+  font-weight:700;
+  font-size:12.5px;
+  padding:9px 12px;
+  border-bottom:1px solid var(--line);
+  background:#FBF7EC;
+}
+.side-item{
+  padding:9px 12px;
+  border-bottom:1px solid #F0ECDD;
+  font-size:11.5px;
+  line-height:1.6;
+}
+.side-item:last-child{border-bottom:none;}
+.side-item .meta{
+  display:flex;justify-content:space-between;
+  font-size:10px;color:var(--ink-soft);margin-bottom:3px;
+}
+.side-item .who-red{color:var(--shu);font-weight:700;}
+.side-item .who-blue{color:var(--ao);font-weight:700;}
+.side-item.alert{background:#FCEFC7;color:#6B4E14;}
+
+/* ===== swap button ===== */
+.swap-btn{
+  border:1.5px solid var(--ink);
+  background:#fff;
+  border-radius:50%;
+  width:34px;height:34px;
+  font-size:15px;
+  cursor:pointer;
+  display:flex;align-items:center;justify-content:center;
+  color:var(--ink);
+  margin-right:10px;
+  transition:.2s;
+}
+.swap-btn:hover{background:#FBF7EC;transform:rotate(180deg);}
+.pane{order:1;}
+.pane + .pane{order:2;}
+.sidebar{order:3;}
+.workspace.swapped .pane:nth-child(1){order:2;}
+.workspace.swapped .pane:nth-child(2){order:1;}
+
+/* ===== unresolved markers on 修正文書 ===== */
+.marker{
+  display:inline-flex;
+  align-items:center;
+  gap:4px;
+  vertical-align:middle;
+  margin-left:3px;
+  font-size:10px;
+  font-family:'Zen Kaku Gothic New',sans-serif;
+  font-weight:700;
+  border-radius:999px;
+  padding:1px 8px 1px 6px;
+  white-space:nowrap;
+}
+.marker .dot{width:8px;height:8px;border-radius:50%;display:inline-block;}
+.marker.pending{background:#FCEAE8;color:var(--shu);border:1px solid var(--shu-soft);}
+.marker.pending .dot{background:var(--shu);animation:blink 1.4s ease-in-out infinite;}
+.marker.inprogress{background:#FFF3D6;color:#8A6512;border:1px solid #E9CE86;}
+.marker.inprogress .dot{background:#E3A916;}
+.marker.done{background:#E7F3E6;color:#3E7A3B;border:1px solid #BFE0BC;}
+.marker.done .dot{background:#3E7A3B;}
+@keyframes blink{
+  0%,100%{opacity:1;box-shadow:0 0 0 0 rgba(190,42,44,.5);}
+  50%{opacity:.35;box-shadow:0 0 0 5px rgba(190,42,44,0);}
+}
+@media (prefers-reduced-motion: reduce){
+  .marker.pending .dot{animation:none;}
+}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo"><span class="dot"></span>赤ペンProof</div>
+  <div class="tools">
+    <button class="tool-btn active"><span class="sw" style="background:var(--shu)"></span>赤ペン</button>
+    <button class="tool-btn"><span class="sw" style="background:var(--ao)"></span>青ペン</button>
+    <button class="tool-btn"><span class="sw" style="background:var(--highlight)"></span>蛍光ペン</button>
+    <button class="tool-btn"><span class="sw" style="background:var(--sticky-y)"></span>付箋</button>
+    <button class="tool-btn"><span class="sw" style="background:#fff;border:1.5px solid var(--shu)"></span>バルーン</button>
+  </div>
+  <div style="display:flex;align-items:center;">
+    <button class="swap-btn" onclick="document.querySelector('.workspace').classList.toggle('swapped')" title="原本と修正文書を入れ替え">⇄</button>
+    <div class="reviewer"><div class="avatar">A</div>校正者：山田（赤）</div>
+  </div>
+</header>
+
+<div class="alertbar">
+  ⚠ <b>個人情報を検知しました</b>
+  <span class="chip">メールアドレス ×1</span>
+  <span class="chip">クレジットカード番号 ×1</span>
+  <span class="chip" style="margin-left:auto;">ホワイトリストに追加</span>
+</div>
+
+<div class="workspace">
+
+  <!-- 原本＋校正レイヤー -->
+  <div class="pane">
+    <div class="pane-head">原本 <span style="font-weight:400;opacity:.6;">＋校正レイヤー</span><span class="tag">original.md（不変）</span></div>
+    <div class="doc">
+      <h1>会員登録のご案内</h1>
+      <p>本サービスへのお申込み<span class="del">ありがとうございます</span><span class="who-tag" style="background:var(--shu)">(^^)</span><span class="ins">誠にありがとうございます</span>。登録確認のご連絡は <span class="hi circle">support@example.co.jp</span> までご連絡ください。
+        <span class="balloon b1"><span class="who">山田（(^^)）</span>個人情報検知：メールを伏字にするか要確認</span>
+      </p>
+      <p>お支払いには<span class="note-ao">クレジットカード番号</span><span class="who-tag" style="background:var(--ao)">YM</span> <span class="del">4111-1111-1111-1111</span> をご利用いただけます。決済処理は自動的に行われるため、特別な手続きは不要です。
+        <span class="sticky y"><span class="who">鈴木（YM）</span>ここ、実在しそうな番号なのでダミー表記に統一しましょう</span>
+      </p>
+      <p>ご不明な点がございましたら、サポートセンターまでお気軽にお問い合わせください。
+        <span class="sticky p"><span class="who">田中（・_・）</span>「お気軽に」がやや口語的。トーン確認</span>
+      </p>
+    </div>
+  </div>
+
+  <!-- 修正文書：初期状態は原本と同一。左のレイヤーに対応する箇所に未反映マーカーを表示 -->
+  <div class="pane">
+    <div class="pane-head">修正文書 <span style="font-weight:400;opacity:.6;">（編集対象）</span><span class="tag">draft.md</span></div>
+    <div class="doc">
+      <h1>会員登録のご案内</h1>
+      <p>本サービスへのお申込みありがとうございます<span class="marker pending"><span class="dot"></span>未反映</span>。登録確認のご連絡は support@example.co.jp<span class="marker pending"><span class="dot"></span>未反映</span> までご連絡ください。</p>
+      <p>お支払いにはクレジットカード番号 <code>4111-1111-1111-1111</code><span class="marker inprogress"><span class="dot"></span>反映中</span> をご利用いただけます。決済処理は自動的に行われるため、特別な手続きは不要です。</p>
+      <p>ご不明な点がございましたら、サポートセンターまでお気軽にお問い合わせください<span class="marker done"><span class="dot"></span>反映済み</span>。</p>
+    </div>
+  </div>
+
+  <!-- サイドバー -->
+  <div class="sidebar">
+    <div class="side-card">
+      <div class="side-head">付箋・コメント</div>
+      <div class="side-item"><div class="meta"><span class="who-red">山田</span><span>10:22</span></div>メール伏字化の要否を確認</div>
+      <div class="side-item"><div class="meta"><span class="who-blue">鈴木</span><span>10:31</span></div>カード番号はダミー表記に統一</div>
+      <div class="side-item"><div class="meta"><span>田中</span><span>10:40</span></div>文末表現のトーン確認</div>
+    </div>
+    <div class="side-card">
+      <div class="side-head">個人情報アラート</div>
+      <div class="side-item alert">メールアドレス検知：1行目</div>
+      <div class="side-item alert">クレジットカード番号検知：2行目（Luhn判定：有効）</div>
+    </div>
+    <div class="side-card">
+      <div class="side-head">校正者フィルタ</div>
+      <div class="side-item"><span class="who-red">● 山田</span>（赤ペン）</div>
+      <div class="side-item"><span class="who-blue">● 鈴木</span>（付箋）</div>
+      <div class="side-item">● 田中（付箋）</div>
+    </div>
+  </div>
+
+</div>
+
+</body>
+</html>
