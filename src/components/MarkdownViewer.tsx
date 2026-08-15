@@ -1,6 +1,195 @@
 import ReactMarkdown from 'react-markdown'
+import type { DocumentSelection, RedPenAnnotation } from '../types/annotation'
 
-export function MarkdownViewer({ markdown }: { markdown: string }) {
+type MarkdownViewerProps = {
+  markdown: string
+  annotations: RedPenAnnotation[]
+  selection?: DocumentSelection | null
+  activeAnnotationId?: string | null
+  mode: 'original' | 'draft'
+}
+
+type SourcePoint = { line?: number; column?: number; offset?: number }
+type SourcePosition = { start?: SourcePoint; end?: SourcePoint }
+type HastNode = {
+  type?: string
+  tagName?: string
+  value?: string
+  properties?: Record<string, unknown>
+  children?: HastNode[]
+  position?: SourcePosition
+}
+
+type TextRecord = {
+  node: HastNode
+  sourceStart: number
+  sourceEnd: number
+}
+
+const blockTags = new Set(['p', 'li', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6'])
+const inlineTags = new Set(['strong', 'em', 'a', 'code'])
+
+function sourceOffsets(position: SourcePosition | undefined) {
+  const start = position?.start?.offset
+  const end = position?.end?.offset
+  return typeof start === 'number' && typeof end === 'number' ? { start, end } : null
+}
+
+function resolveTextOffsets(node: HastNode, parent: HastNode | undefined, markdown: string) {
+  const value = node.value ?? ''
+  const own = sourceOffsets(node.position)
+  if (own && markdown.slice(own.start, own.end) === value) return own
+
+  const parentOffsets = sourceOffsets(parent?.position)
+  if (!parentOffsets || !value) return null
+  const parentSource = markdown.slice(parentOffsets.start, parentOffsets.end)
+  const localStart = parentSource.indexOf(value)
+  if (localStart < 0 || localStart !== parentSource.lastIndexOf(value)) return null
+  return { start: parentOffsets.start + localStart, end: parentOffsets.start + localStart + value.length }
+}
+
+function textNode(value: string): HastNode {
+  return { type: 'text', value }
+}
+
+function elementNode(tagName: string, properties: Record<string, unknown>, children: HastNode[]): HastNode {
+  return { type: 'element', tagName, properties, children }
+}
+
+function sourceSpan(value: string, sourceStart: number, sourceEnd: number, extra: Record<string, unknown> = {}) {
+  return elementNode('span', { 'data-source-start': sourceStart, 'data-source-end': sourceEnd, ...extra }, [textNode(value)])
+}
+
+function createSourcePositionPlugin(markdown: string, annotations: RedPenAnnotation[], selection: DocumentSelection | null | undefined, activeAnnotationId: string | null | undefined, mode: 'original' | 'draft') {
+  return () => (tree: HastNode) => {
+    const records: TextRecord[] = []
+
+    const collect = (node: HastNode, parent?: HastNode) => {
+      if (node.type === 'element' && node.tagName) {
+        const offsets = sourceOffsets(node.position)
+        node.properties ??= {}
+        if (blockTags.has(node.tagName) && offsets) {
+          const kind = node.tagName === 'p' ? 'paragraph' : node.tagName.startsWith('h') ? 'heading' : node.tagName
+          node.properties['data-source-block'] = 'true'
+          node.properties['data-paragraph-id'] = `${kind}_${String(offsets.start).padStart(6, '0')}`
+          node.properties['data-source-start'] = offsets.start
+          node.properties['data-source-end'] = offsets.end
+          node.properties['data-start-line'] = node.position?.start?.line
+          node.properties['data-end-line'] = node.position?.end?.line
+        }
+        if (inlineTags.has(node.tagName) && offsets) {
+          node.properties['data-inline-source-start'] = offsets.start
+          node.properties['data-inline-source-end'] = offsets.end
+          node.properties['data-inline-kind'] = node.tagName === 'a' ? 'link' : node.tagName === 'code' ? 'inline-code' : node.tagName
+        }
+      }
+
+      if (node.type === 'text') {
+        const offsets = resolveTextOffsets(node, parent, markdown)
+        if (offsets) records.push({ node, sourceStart: offsets.start, sourceEnd: offsets.end })
+      }
+      node.children?.forEach(child => collect(child, node))
+    }
+    collect(tree)
+
+    const activeRanges = [
+      ...annotations
+        .filter(annotation => mode === 'original' || (
+          annotation.anchorStatus === 'resolved'
+          && annotation.draftAnchor
+          && markdown.slice(annotation.draftAnchor.start, annotation.draftAnchor.end) === annotation.sourceText
+        ))
+        .map(annotation => ({
+          kind: 'annotation' as const,
+          id: annotation.id,
+          anchor: mode === 'original' ? {
+            ...annotation,
+            sourceStart: annotation.originalAnchor.sourceStart,
+            sourceEnd: annotation.originalAnchor.sourceEnd,
+          } : {
+            ...annotation,
+            sourceStart: annotation.draftAnchor!.start,
+            sourceEnd: annotation.draftAnchor!.end,
+          },
+        })),
+      ...(mode === 'original' && selection ? [{ kind: 'selection' as const, id: 'current-selection', anchor: selection }] : []),
+    ]
+    const firstRecord = new Map<string, HastNode>()
+    const lastRecord = new Map<string, HastNode>()
+    for (const range of activeRanges) {
+      const overlapping = records.filter(record => record.sourceStart < range.anchor.sourceEnd && record.sourceEnd > range.anchor.sourceStart)
+      if (overlapping.length) {
+        firstRecord.set(range.id, overlapping[0].node)
+        lastRecord.set(range.id, overlapping[overlapping.length - 1].node)
+      }
+    }
+
+    const transform = (node: HastNode) => {
+      if (!node.children) return
+      node.children = node.children.flatMap(child => {
+        if (child.type !== 'text') {
+          transform(child)
+          return [child]
+        }
+        const record = records.find(item => item.node === child)
+        if (!record || !child.value) return [child]
+
+        const overlaps = activeRanges
+          .filter(range => record.sourceStart < range.anchor.sourceEnd && record.sourceEnd > range.anchor.sourceStart)
+          .sort((a, b) => a.anchor.sourceStart - b.anchor.sourceStart)
+        if (!overlaps.length) return [sourceSpan(child.value, record.sourceStart, record.sourceEnd)]
+
+        const result: HastNode[] = []
+        let cursor = record.sourceStart
+        for (const range of overlaps) {
+          const partStart = Math.max(record.sourceStart, range.anchor.sourceStart)
+          const partEnd = Math.min(record.sourceEnd, range.anchor.sourceEnd)
+          if (partStart < cursor) continue
+          if (partStart > cursor) result.push(sourceSpan(child.value.slice(cursor - record.sourceStart, partStart - record.sourceStart), cursor, partStart))
+          const visiblePart = child.value.slice(partStart - record.sourceStart, partEnd - record.sourceStart)
+
+          if (range.kind === 'selection') {
+            result.push(elementNode('mark', {
+              className: ['document-selection', ...(firstRecord.get(range.id) === child ? ['selection-start'] : [])],
+              'data-selection': 'current',
+              'data-source-start': partStart,
+              'data-source-end': partEnd,
+            }, [textNode(visiblePart)]))
+          } else if (mode === 'original') {
+            const completed = range.anchor.status !== 'pending'
+            const children = [elementNode('span', { className: ['del'] }, [textNode(visiblePart)])]
+            if (lastRecord.get(range.id) === child) {
+              children.push(elementNode('span', { className: ['ins'], 'aria-label': `修正案：${range.anchor.replacementText}` }, [textNode(range.anchor.replacementText)]))
+              if (completed) children.push(elementNode('span', { className: ['annotation-complete-mark'], 'aria-label': '確認完了' }, [textNode('✓')]))
+            }
+            result.push(elementNode('span', {
+              className: ['red-pen-annotation', ...(completed ? ['is-completed'] : []), ...(activeAnnotationId === range.id ? ['is-active'] : [])],
+              'data-annotation-id': range.id,
+              'data-source-start': partStart,
+              'data-source-end': partEnd,
+            }, children))
+          } else {
+            const children = [textNode(visiblePart)]
+            const markerText = range.anchor.status === 'completed_changed' ? '✓ 完了' : range.anchor.status === 'completed_unchanged' ? '変更なしで完了' : '未反映'
+            if (lastRecord.get(range.id) === child) children.push(elementNode('span', { className: ['pending-marker', range.anchor.status] }, [textNode(markerText)]))
+            result.push(elementNode('span', {
+              className: ['pending-anchor', ...(range.anchor.status !== 'pending' ? ['is-completed'] : []), ...(activeAnnotationId === range.id ? ['is-active'] : [])],
+              'data-annotation-id': range.id,
+              'data-source-start': partStart,
+              'data-source-end': partEnd,
+            }, children))
+          }
+          cursor = partEnd
+        }
+        if (cursor < record.sourceEnd) result.push(sourceSpan(child.value.slice(cursor - record.sourceStart), cursor, record.sourceEnd))
+        return result
+      })
+    }
+    transform(tree)
+  }
+}
+
+export function MarkdownViewer({ markdown, annotations, selection, activeAnnotationId, mode }: MarkdownViewerProps) {
   if (!markdown) {
     return (
       <div className="empty-document">
@@ -10,5 +199,5 @@ export function MarkdownViewer({ markdown }: { markdown: string }) {
     )
   }
 
-  return <ReactMarkdown>{markdown}</ReactMarkdown>
+  return <ReactMarkdown rehypePlugins={[createSourcePositionPlugin(markdown, annotations, selection, activeAnnotationId, mode)]}>{markdown}</ReactMarkdown>
 }
