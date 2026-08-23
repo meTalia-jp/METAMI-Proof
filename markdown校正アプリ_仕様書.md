@@ -1,4 +1,4 @@
-# 赤ペンProof 仕様書
+# METAMI Proof 仕様書
 
 ## 1. コンセプト
 

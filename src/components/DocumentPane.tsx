@@ -1,17 +1,20 @@
-import { useEffect, useRef, type MouseEvent } from 'react'
+import { useEffect, useRef, useState, type MouseEvent } from 'react'
 import { MarkdownViewer } from './MarkdownViewer'
-import type { DocumentSelection, RedPenAnnotation } from '../types/annotation'
+import type { DocumentSelection, HighlightAnnotation, RedPenAnnotation } from '../types/annotation'
 
 type DocumentPaneProps = {
   kind: 'original' | 'draft'
   markdown: string
   fileName: string
   annotations: RedPenAnnotation[]
+  highlights: HighlightAnnotation[]
   documentSelection?: DocumentSelection | null
   activeAnnotationId?: string | null
   draftEditing?: boolean
   onOriginalSelection?: () => void
   onAnnotationClick?: (annotationId: string) => void
+  eraserActive?: boolean
+  onAnnotationDeleteRequest?: (annotationId: string) => void
   onDraftEditingChange?: (editing: boolean) => void
   draftCanEdit?: boolean
   editingMarkdown?: string
@@ -24,9 +27,18 @@ type DocumentPaneProps = {
   editSelection?: { start: number; end: number; requestId: number } | null
 }
 
-export function DocumentPane({ kind, markdown, fileName, annotations, documentSelection, activeAnnotationId, draftEditing, onOriginalSelection, onAnnotationClick, onDraftEditingChange, draftCanEdit = false, editingMarkdown = markdown, onBeginDraftEditing, onEditingDraftChange, onCancelDraftEditing, onApplyDraftEditing, directEditing = false, onRequestPreview, editSelection }: DocumentPaneProps) {
+export function DocumentPane({ kind, markdown, fileName, annotations, highlights, documentSelection, activeAnnotationId, draftEditing, onOriginalSelection, onAnnotationClick, eraserActive = false, onAnnotationDeleteRequest, onDraftEditingChange, draftCanEdit = false, editingMarkdown = markdown, onBeginDraftEditing, onEditingDraftChange, onCancelDraftEditing, onApplyDraftEditing, directEditing = false, onRequestPreview, editSelection }: DocumentPaneProps) {
   const isOriginal = kind === 'original'
   const editorRef = useRef<HTMLTextAreaElement>(null)
+  const popoverRef = useRef<HTMLDivElement>(null)
+  const markerRef = useRef<HTMLElement | null>(null)
+  const [commentPopover, setCommentPopover] = useState<{
+    annotationId: string
+    comment: string
+    reviewer: string
+    top: number
+    left: number
+  } | null>(null)
 
   useEffect(() => {
     if (!draftEditing || !editSelection || !editorRef.current) return
@@ -39,10 +51,77 @@ export function DocumentPane({ kind, markdown, fileName, annotations, documentSe
     })
   }, [draftEditing, editSelection])
 
+  useEffect(() => {
+    if (!commentPopover) return
+    const closeOnPointerDown = (event: PointerEvent) => {
+      const target = event.target as Node
+      if (popoverRef.current?.contains(target) || markerRef.current?.contains(target)) return
+      setCommentPopover(null)
+    }
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setCommentPopover(null)
+    }
+    const closeOnScroll = () => setCommentPopover(null)
+    document.addEventListener('pointerdown', closeOnPointerDown)
+    document.addEventListener('keydown', closeOnEscape)
+    window.addEventListener('scroll', closeOnScroll, true)
+    return () => {
+      document.removeEventListener('pointerdown', closeOnPointerDown)
+      document.removeEventListener('keydown', closeOnEscape)
+      window.removeEventListener('scroll', closeOnScroll, true)
+    }
+  }, [commentPopover])
+
+  useEffect(() => {
+    if (!commentPopover || !popoverRef.current) return
+    const rect = popoverRef.current.getBoundingClientRect()
+    const edgeGap = 12
+    const left = Math.min(Math.max(edgeGap, commentPopover.left), Math.max(edgeGap, window.innerWidth - rect.width - edgeGap))
+    const top = Math.min(Math.max(edgeGap, commentPopover.top), Math.max(edgeGap, window.innerHeight - rect.height - edgeGap))
+    if (left !== commentPopover.left || top !== commentPopover.top) {
+      setCommentPopover(current => current ? { ...current, left, top } : null)
+    }
+  }, [commentPopover])
+
+  useEffect(() => {
+    if (commentPopover && !highlights.some(highlight => highlight.id === commentPopover.annotationId)) {
+      markerRef.current = null
+      setCommentPopover(null)
+    }
+  }, [commentPopover, highlights])
+
   const selectAnnotation = (event: MouseEvent<HTMLElement>) => {
     const annotationElement = (event.target as HTMLElement).closest<HTMLElement>('[data-annotation-id]')
     const annotationId = annotationElement?.dataset.annotationId
-    if (annotationId) onAnnotationClick?.(annotationId)
+    if (!annotationId) return
+    if (eraserActive) {
+      markerRef.current = null
+      setCommentPopover(null)
+      onAnnotationDeleteRequest?.(annotationId)
+      return
+    }
+    onAnnotationClick?.(annotationId)
+
+    const marker = (event.target as HTMLElement).closest<HTMLElement>('.highlight-comment-marker')
+    const highlight = marker ? highlights.find(item => item.id === annotationId && item.comment) : undefined
+    if (!marker || !highlight?.comment) return
+    if (commentPopover?.annotationId === annotationId) {
+      markerRef.current = null
+      setCommentPopover(null)
+      return
+    }
+
+    markerRef.current = marker
+    const rect = marker.getBoundingClientRect()
+    const popoverWidth = 280
+    const estimatedHeight = 130
+    const edgeGap = 12
+    const gap = 8
+    const left = Math.min(Math.max(edgeGap, rect.left), Math.max(edgeGap, window.innerWidth - popoverWidth - edgeGap))
+    const top = rect.bottom + gap + estimatedHeight <= window.innerHeight - edgeGap
+      ? rect.bottom + gap
+      : Math.max(edgeGap, rect.top - estimatedHeight - gap)
+    setCommentPopover({ annotationId, comment: highlight.comment, reviewer: highlight.reviewer.name, top, left })
   }
 
   return (
@@ -70,9 +149,17 @@ export function DocumentPane({ kind, markdown, fileName, annotations, documentSe
           </div>}
         </div>
       ) : (
-        <article className="markdown-body" onMouseUp={isOriginal ? onOriginalSelection : undefined} onClick={selectAnnotation}>
-          <MarkdownViewer markdown={markdown} annotations={annotations} selection={isOriginal ? documentSelection : null} activeAnnotationId={activeAnnotationId} mode={kind} />
-        </article>
+        <>
+          <article className={`markdown-body ${eraserActive ? 'eraser-mode' : ''}`} onMouseUp={isOriginal && !eraserActive ? onOriginalSelection : undefined} onClick={selectAnnotation}>
+            <MarkdownViewer markdown={markdown} annotations={annotations} highlights={highlights} selection={isOriginal ? documentSelection : null} activeAnnotationId={activeAnnotationId} mode={kind} />
+          </article>
+          {commentPopover && (
+            <div ref={popoverRef} className="highlight-comment-popover" role="dialog" aria-label="蛍光コメント" style={{ top: commentPopover.top, left: commentPopover.left }}>
+              <p>{commentPopover.comment}</p>
+              <span>校正者：{commentPopover.reviewer}</span>
+            </div>
+          )}
+        </>
       )}
     </section>
   )

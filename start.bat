@@ -2,7 +2,7 @@
 setlocal EnableExtensions
 
 cd /d "%~dp0"
-title RpenProof
+title METAMI Proof
 
 set "NODE_EXE="
 for %%I in (node.exe) do if not "%%~$PATH:I"=="" set "NODE_EXE=%%~$PATH:I"
@@ -54,7 +54,7 @@ if not exist "node_modules\vite\bin\vite.js" (
 )
 
 echo.
-echo Starting RpenProof...
+echo Starting METAMI Proof...
 echo The browser will open automatically.
 echo Press Ctrl+C in this window to stop the app.
 echo.
@@ -64,7 +64,7 @@ set "APP_EXIT=%ERRORLEVEL%"
 
 if not "%APP_EXIT%"=="0" (
   echo.
-  echo ERROR: RpenProof could not be started. Exit code: %APP_EXIT%
+  echo ERROR: METAMI Proof could not be started. Exit code: %APP_EXIT%
   pause
 )
 

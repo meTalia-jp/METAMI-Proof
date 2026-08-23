@@ -1,9 +1,11 @@
 import ReactMarkdown from 'react-markdown'
-import type { DocumentSelection, RedPenAnnotation } from '../types/annotation'
+import remarkGfm from 'remark-gfm'
+import type { DocumentSelection, HighlightAnnotation, RedPenAnnotation } from '../types/annotation'
 
 type MarkdownViewerProps = {
   markdown: string
   annotations: RedPenAnnotation[]
+  highlights: HighlightAnnotation[]
   selection?: DocumentSelection | null
   activeAnnotationId?: string | null
   mode: 'original' | 'draft'
@@ -60,7 +62,7 @@ function sourceSpan(value: string, sourceStart: number, sourceEnd: number, extra
   return elementNode('span', { 'data-source-start': sourceStart, 'data-source-end': sourceEnd, ...extra }, [textNode(value)])
 }
 
-function createSourcePositionPlugin(markdown: string, annotations: RedPenAnnotation[], selection: DocumentSelection | null | undefined, activeAnnotationId: string | null | undefined, mode: 'original' | 'draft') {
+function createSourcePositionPlugin(markdown: string, annotations: RedPenAnnotation[], highlights: HighlightAnnotation[], selection: DocumentSelection | null | undefined, activeAnnotationId: string | null | undefined, mode: 'original' | 'draft') {
   return () => (tree: HastNode) => {
     const records: TextRecord[] = []
 
@@ -112,10 +114,16 @@ function createSourcePositionPlugin(markdown: string, annotations: RedPenAnnotat
             sourceEnd: annotation.draftAnchor!.end,
           },
         })),
+      ...(mode === 'original' ? highlights.map(highlight => ({
+        kind: 'highlight' as const,
+        id: highlight.id,
+        anchor: highlight,
+      })) : []),
       ...(mode === 'original' && selection ? [{ kind: 'selection' as const, id: 'current-selection', anchor: selection }] : []),
     ]
     const firstRecord = new Map<string, HastNode>()
     const lastRecord = new Map<string, HastNode>()
+    const emittedHighlightMarkers = new Set<string>()
     for (const range of activeRanges) {
       const overlapping = records.filter(record => record.sourceStart < range.anchor.sourceEnd && record.sourceEnd > range.anchor.sourceStart)
       if (overlapping.length) {
@@ -123,6 +131,19 @@ function createSourcePositionPlugin(markdown: string, annotations: RedPenAnnotat
         lastRecord.set(range.id, overlapping[overlapping.length - 1].node)
       }
     }
+
+    const highlightCommentMarker = (range: { id: string; anchor: HighlightAnnotation }) => elementNode('span', {
+      className: ['highlight-comment-marker', ...(activeAnnotationId === range.id ? ['is-active'] : [])],
+      'data-annotation-id': range.id,
+      'data-review-id': range.id,
+      'data-review-type': 'highlight',
+      'data-comment': range.anchor.comment ?? '',
+      'data-reviewer': range.anchor.reviewer.name,
+      'aria-label': `蛍光コメント：${range.anchor.comment}`,
+      title: range.anchor.comment ?? undefined,
+      role: 'button',
+      tabIndex: 0,
+    }, [textNode('💬')])
 
     const transform = (node: HastNode) => {
       if (!node.children) return
@@ -155,16 +176,34 @@ function createSourcePositionPlugin(markdown: string, annotations: RedPenAnnotat
               'data-source-start': partStart,
               'data-source-end': partEnd,
             }, [textNode(visiblePart)]))
+          } else if (range.kind === 'highlight') {
+            result.push(elementNode('mark', {
+              className: ['highlight-annotation', `highlight-${range.anchor.color}`, ...(activeAnnotationId === range.id ? ['is-active'] : [])],
+              'data-annotation-id': range.id,
+              'data-review-id': range.id,
+              'data-review-type': 'highlight',
+              'data-source-start': partStart,
+              'data-source-end': partEnd,
+              'aria-label': range.anchor.comment ? `蛍光コメント：${range.anchor.comment}` : `${range.anchor.color === 'green' ? '緑' : '黄色'}蛍光`,
+              title: range.anchor.comment ?? undefined,
+            }, [textNode(visiblePart)]))
+            if (lastRecord.get(range.id) === child && range.anchor.comment) {
+              result.push(highlightCommentMarker(range))
+              emittedHighlightMarkers.add(range.id)
+            }
           } else if (mode === 'original') {
             const completed = range.anchor.status !== 'pending'
-            const children = [elementNode('span', { className: ['del'] }, [textNode(visiblePart)])]
+            const reviewProperties = { 'data-review-id': range.id, 'data-review-type': 'correction' }
+            const children = [elementNode('span', { className: ['del'], ...reviewProperties }, [textNode(visiblePart)])]
             if (lastRecord.get(range.id) === child) {
-              children.push(elementNode('span', { className: ['ins'], 'aria-label': `修正案：${range.anchor.replacementText}` }, [textNode(range.anchor.replacementText)]))
+              children.push(elementNode('span', { className: ['ins'], 'aria-label': `レビュー：${range.anchor.replacementText}`, ...reviewProperties }, [textNode(range.anchor.replacementText)]))
               if (completed) children.push(elementNode('span', { className: ['annotation-complete-mark'], 'aria-label': '確認完了' }, [textNode('✓')]))
             }
             result.push(elementNode('span', {
               className: ['red-pen-annotation', ...(completed ? ['is-completed'] : []), ...(activeAnnotationId === range.id ? ['is-active'] : [])],
               'data-annotation-id': range.id,
+              'data-review-id': range.id,
+              'data-review-type': 'correction',
               'data-source-start': partStart,
               'data-source-end': partEnd,
             }, children))
@@ -182,6 +221,12 @@ function createSourcePositionPlugin(markdown: string, annotations: RedPenAnnotat
           cursor = partEnd
         }
         if (cursor < record.sourceEnd) result.push(sourceSpan(child.value.slice(cursor - record.sourceStart), cursor, record.sourceEnd))
+        for (const highlight of highlights) {
+          if (highlight.comment && lastRecord.get(highlight.id) === child && !emittedHighlightMarkers.has(highlight.id)) {
+            result.push(highlightCommentMarker({ id: highlight.id, anchor: highlight }))
+            emittedHighlightMarkers.add(highlight.id)
+          }
+        }
         return result
       })
     }
@@ -189,7 +234,7 @@ function createSourcePositionPlugin(markdown: string, annotations: RedPenAnnotat
   }
 }
 
-export function MarkdownViewer({ markdown, annotations, selection, activeAnnotationId, mode }: MarkdownViewerProps) {
+export function MarkdownViewer({ markdown, annotations, highlights, selection, activeAnnotationId, mode }: MarkdownViewerProps) {
   if (!markdown) {
     return (
       <div className="empty-document">
@@ -199,5 +244,5 @@ export function MarkdownViewer({ markdown, annotations, selection, activeAnnotat
     )
   }
 
-  return <ReactMarkdown rehypePlugins={[createSourcePositionPlugin(markdown, annotations, selection, activeAnnotationId, mode)]}>{markdown}</ReactMarkdown>
+  return <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[createSourcePositionPlugin(markdown, annotations, highlights, selection, activeAnnotationId, mode)]}>{markdown}</ReactMarkdown>
 }

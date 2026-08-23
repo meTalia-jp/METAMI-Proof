@@ -1,8 +1,9 @@
-import type { RedPenAnnotation } from '../types/annotation'
+import type { HighlightAnnotation, RedPenAnnotation } from '../types/annotation'
 import type { ReviewPhase } from '../types/review'
 
 type SidebarProps = {
   annotations: RedPenAnnotation[]
+  highlights: HighlightAnnotation[]
   activeAnnotationId: string | null
   onClose: () => void
   onSelectAnnotation: (annotationId: string) => void
@@ -10,6 +11,7 @@ type SidebarProps = {
   onApplyProposal: (annotationId: string) => void
   onEdit: (annotationId: string) => void
   onReopen: (annotationId: string) => void
+  onDeleteRequest: (annotationId: string) => void
   phase: ReviewPhase
 }
 
@@ -19,8 +21,11 @@ const statusLabel = (annotation: RedPenAnnotation) => {
   return annotation.anchorStatus === 'unresolved' ? '⚠ 位置未特定' : annotation.proposalApplied ? '修正案を適用済み' : '未完了'
 }
 
-export function Sidebar({ annotations, activeAnnotationId, onClose, onSelectAnnotation, onComplete, onApplyProposal, onEdit, onReopen, phase }: SidebarProps) {
+const highlightColorLabel = (color: HighlightAnnotation['color']) => color === 'green' ? '緑' : color === 'yellow' ? '黄色' : color
+
+export function Sidebar({ annotations, highlights, activeAnnotationId, onClose, onSelectAnnotation, onComplete, onApplyProposal, onEdit, onReopen, onDeleteRequest, phase }: SidebarProps) {
   const activeAnnotation = annotations.find(annotation => annotation.id === activeAnnotationId)
+  const activeHighlight = highlights.find(annotation => annotation.id === activeAnnotationId)
   const pending = annotations.filter(annotation => annotation.status === 'pending')
   const completed = annotations.filter(annotation => annotation.status !== 'pending')
 
@@ -30,7 +35,16 @@ export function Sidebar({ annotations, activeAnnotationId, onClose, onSelectAnno
 
       <section className="side-card workflow-card">
         <h2>修正者ワークフロー</h2>
-        {activeAnnotation ? (
+        {activeHighlight ? (
+          <div className={`active-instruction highlight-detail ${activeHighlight.color}`}>
+            <span className={`workflow-status highlight-status ${activeHighlight.color}`}>蛍光・{highlightColorLabel(activeHighlight.color)}</span>
+            <div className="instruction-details">
+              <p><span>対象文字列</span><mark>{activeHighlight.targetText}</mark></p>
+              <p><span>コメント</span><output>{activeHighlight.comment || 'コメントなし'}</output></p>
+              <p><span>校正者</span><output>{activeHighlight.reviewer.name}</output></p>
+            </div>
+          </div>
+        ) : activeAnnotation ? (
           <div className="active-instruction">
             <span className={`workflow-status ${activeAnnotation.status}`}>{statusLabel(activeAnnotation)}</span>
             <div className="instruction-details">
@@ -61,14 +75,29 @@ export function Sidebar({ annotations, activeAnnotationId, onClose, onSelectAnno
         ) : <p>未反映マーカーまたは一覧から指示を選択してください。</p>}
       </section>
 
+      {highlights.length > 0 && <section className="side-card highlight-list-card">
+        <h2>蛍光 <span>{highlights.length}件</span></h2>
+        <ol className="pending-list">
+          {highlights.map(highlight => (
+            <li key={highlight.id}>
+              <button type="button" className={`annotation-select-button ${highlight.id === activeAnnotationId ? 'active' : ''}`} onClick={() => onSelectAnnotation(highlight.id)}>
+                <span>{highlight.targetText}</span><small>{highlight.comment || 'コメントなし'}・{highlightColorLabel(highlight.color)}</small>
+              </button>
+              {phase === 'reviewing' && <button type="button" className="annotation-delete-button" onClick={() => onDeleteRequest(highlight.id)} aria-label={`蛍光「${highlight.targetText}」を削除`}>削除</button>}
+            </li>
+          ))}
+        </ol>
+      </section>}
+
       {completed.length > 0 && <section className="side-card completed-list-card">
         <h2>完了済み <span>{completed.length}件</span></h2>
         <ol className="pending-list">
           {completed.map(annotation => (
             <li key={annotation.id}>
-              <button type="button" className={annotation.id === activeAnnotationId ? 'active' : ''} onClick={() => onSelectAnnotation(annotation.id)}>
+              <button type="button" className={`annotation-select-button ${annotation.id === activeAnnotationId ? 'active' : ''}`} onClick={() => onSelectAnnotation(annotation.id)}>
                 <span>{annotation.targetText}</span><small>{annotation.status === 'completed_changed' ? '修正済 ✓' : '変更せず完了 ✓'}</small>
               </button>
+              {phase === 'reviewing' && <button type="button" className="annotation-delete-button" onClick={() => onDeleteRequest(annotation.id)} aria-label={`赤ペン「${annotation.targetText}」を削除`}>削除</button>}
             </li>
           ))}
         </ol>
@@ -80,9 +109,10 @@ export function Sidebar({ annotations, activeAnnotationId, onClose, onSelectAnno
           <ol className="pending-list">
             {pending.map(annotation => (
               <li key={annotation.id}>
-                <button type="button" className={annotation.id === activeAnnotationId ? 'active' : ''} onClick={() => onSelectAnnotation(annotation.id)}>
+                <button type="button" className={`annotation-select-button ${annotation.id === activeAnnotationId ? 'active' : ''}`} onClick={() => onSelectAnnotation(annotation.id)}>
                   <span>{annotation.targetText}</span><small>{annotation.anchorStatus === 'unresolved' ? '⚠ 原本を確認' : `→ ${annotation.replacementText}`}</small>
                 </button>
+                {phase === 'reviewing' && <button type="button" className="annotation-delete-button" onClick={() => onDeleteRequest(annotation.id)} aria-label={`赤ペン「${annotation.targetText}」を削除`}>削除</button>}
               </li>
             ))}
           </ol>

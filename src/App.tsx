@@ -1,19 +1,23 @@
 import { ChangeEvent, useEffect, useRef, useState } from 'react'
 import { DocumentPane } from './components/DocumentPane'
-import { Header } from './components/Header'
+import { Header, type ActiveTool, type PaneLayout } from './components/Header'
 import { Sidebar } from './components/Sidebar'
 import { RedPenDialog } from './components/RedPenDialog'
+import { HighlightDialog } from './components/HighlightDialog'
 import { ReviewLockDialog } from './components/ReviewLockDialog'
 import { MarkdownStructureDialog } from './components/MarkdownStructureDialog'
 import { PolishingConfirmDialog } from './components/PolishingConfirmDialog'
 import { MarkdownExportDialog } from './components/MarkdownExportDialog'
-import type { DocumentSelection, RedPenAnnotation } from './types/annotation'
+import { AnnotationDeleteDialog } from './components/AnnotationDeleteDialog'
+import { PasteMarkdownDialog } from './components/PasteMarkdownDialog'
+import type { DocumentSelection, HighlightAnnotation, HighlightColor, RedPenAnnotation, ReviewTag } from './types/annotation'
 import { areAllReviewersCompleted, type Reviewer, type ReviewRound } from './types/review'
 import { reanchorPendingAnnotations } from './utils/reanchor'
 import { detectMarkdownStructureChanges, type MarkdownStructureChange } from './utils/markdownStructure'
+import { buildReviewExportData, createAnnotationId, validateReviewExportData } from './utils/portableReview'
+import { renderReviewHtml } from './utils/renderReviewHtml'
 
 type MobilePane = 'original' | 'draft'
-type PolishingView = 'draftFocus' | 'split'
 type StructureAfterAction = 'stay' | 'preview' | 'export' | 'apply-proposal'
 
 const initialRound = (): ReviewRound => ({ id: 'round_001', number: 1, phase: 'reviewing', lockedAt: null })
@@ -26,9 +30,18 @@ function App() {
   const [swapped, setSwapped] = useState(false)
   const [sidebarOpen, setSidebarOpen] = useState(true)
   const [mobilePane, setMobilePane] = useState<MobilePane>('original')
+  const [paneLayout, setPaneLayout] = useState<PaneLayout>('reviewOnly')
+  const [activeTool, setActiveTool] = useState<ActiveTool>('redPen')
   const [annotations, setAnnotations] = useState<RedPenAnnotation[]>([])
+  const [highlightAnnotations, setHighlightAnnotations] = useState<HighlightAnnotation[]>([])
   const [documentSelection, setDocumentSelection] = useState<DocumentSelection | null>(null)
   const [dialogOpen, setDialogOpen] = useState(false)
+  const [highlightDialogOpen, setHighlightDialogOpen] = useState(false)
+  const [redPenDraft, setRedPenDraft] = useState('')
+  const [redPenTagDraft, setRedPenTagDraft] = useState<ReviewTag | null>(null)
+  const [highlightCommentDraft, setHighlightCommentDraft] = useState('')
+  const [highlightTagDraft, setHighlightTagDraft] = useState<ReviewTag | null>(null)
+  const [highlightColor, setHighlightColor] = useState<HighlightColor>('yellow')
   const [notice, setNotice] = useState('')
   const [activeAnnotationId, setActiveAnnotationId] = useState<string | null>(null)
   const [draftEditing, setDraftEditing] = useState(false)
@@ -38,7 +51,6 @@ function App() {
   const [editingDraftMarkdown, setEditingDraftMarkdown] = useState('')
   const [structureChanges, setStructureChanges] = useState<MarkdownStructureChange[]>([])
   const [structureDialogOpen, setStructureDialogOpen] = useState(false)
-  const [polishingView, setPolishingView] = useState<PolishingView>('draftFocus')
   const [polishingDialogOpen, setPolishingDialogOpen] = useState(false)
   const [exportDialogOpen, setExportDialogOpen] = useState(false)
   const [exporting, setExporting] = useState(false)
@@ -47,7 +59,10 @@ function App() {
   const [pendingProposalId, setPendingProposalId] = useState<string | null>(null)
   const [editSelection, setEditSelection] = useState<{ start: number; end: number; requestId: number } | null>(null)
   const [editingAnnotationId, setEditingAnnotationId] = useState<string | null>(null)
+  const [deleteTarget, setDeleteTarget] = useState<{ kind: 'red_pen' | 'highlight'; id: string } | null>(null)
+  const [pasteDialogOpen, setPasteDialogOpen] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const workDataInputRef = useRef<HTMLInputElement>(null)
   const reanchorTimerRef = useRef<number | null>(null)
   const polishingTimerRef = useRef<number | null>(null)
   const lastWarnedEditingRef = useRef('')
@@ -58,6 +73,11 @@ function App() {
   const clearDocumentSelection = () => {
     setDocumentSelection(null)
     setDialogOpen(false)
+    setHighlightDialogOpen(false)
+    setRedPenDraft('')
+    setRedPenTagDraft(null)
+    setHighlightCommentDraft('')
+    setHighlightTagDraft(null)
     setNotice('')
     window.getSelection()?.removeAllRanges()
   }
@@ -70,26 +90,32 @@ function App() {
     return () => window.removeEventListener('keydown', handleEscape)
   }, [documentSelection])
 
-  const loadMarkdown = async (event: ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0]
-    if (!file) return
-    const markdown = await file.text()
+  const startReview = (markdown: string, sourceFileName: string) => {
     setOriginalMarkdown(markdown)
     setDraftMarkdown(markdown)
-    setFileName(file.name)
+    setFileName(sourceFileName)
     setAnnotations([])
+    setHighlightAnnotations([])
     setDocumentSelection(null)
     setDialogOpen(false)
+    setHighlightDialogOpen(false)
+    setRedPenDraft('')
+    setRedPenTagDraft(null)
+    setHighlightCommentDraft('')
+    setHighlightTagDraft(null)
+    setHighlightColor('yellow')
     setNotice('')
     setActiveAnnotationId(null)
     setDraftEditing(false)
     setReviewRound(initialRound())
+    setPaneLayout('reviewOnly')
+    setActiveTool('redPen')
+    setMobilePane('original')
     setReviewers(initialReviewers())
     setLockDialogOpen(false)
     setEditingDraftMarkdown(markdown)
     setStructureChanges([])
     setStructureDialogOpen(false)
-    setPolishingView('draftFocus')
     setPolishingDialogOpen(false)
     setExportDialogOpen(false)
     setExporting(false)
@@ -98,8 +124,164 @@ function App() {
     setPendingProposalId(null)
     setEditSelection(null)
     setEditingAnnotationId(null)
+    setDeleteTarget(null)
+    setPasteDialogOpen(false)
     lastWarnedEditingRef.current = ''
+  }
+
+  const loadMarkdown = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    if (!file) return
+    startReview(await file.text(), file.name)
     event.target.value = ''
+  }
+
+  const loadWorkData = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    if (!file) return
+    try {
+      const parsed: unknown = JSON.parse(await file.text())
+      const validated = validateReviewExportData(parsed)
+      if (!validated.ok) {
+        setNotice(`作業データを読み込めませんでした。${validated.error}`)
+        return
+      }
+
+      const data = validated.data
+      const phase = data.workflow.phase === 'locked' ? 'revising' : data.workflow.phase
+      const restoredRound: ReviewRound = {
+        id: data.workflow.roundId,
+        number: data.workflow.roundNumber,
+        phase,
+        lockedAt: data.workflow.lockedAt,
+      }
+      setOriginalMarkdown(data.document.originalMarkdown)
+      setDraftMarkdown(data.document.draftMarkdown)
+      setFileName(data.document.sourceFileName)
+      setAnnotations(data.corrections.map(({ reviewText, ...correction }) => ({
+        ...correction,
+        replacementText: reviewText,
+        reviewer: correction.reviewer ?? undefined,
+        createdAt: correction.createdAt ?? undefined,
+      })))
+      setHighlightAnnotations(data.highlights)
+      setReviewers(data.reviewers)
+      setReviewRound(restoredRound)
+      setEditingDraftMarkdown(data.document.draftMarkdown)
+      setPaneLayout(phase === 'reviewing' ? 'reviewOnly' : phase === 'revising' ? 'sideBySide' : 'revisionOnly')
+      setSidebarOpen(phase === 'reviewing' || phase === 'revising')
+      setDraftEditing(phase === 'polishing')
+      setActiveTool('redPen')
+      setSwapped(false)
+      setMobilePane(phase === 'reviewing' ? 'original' : 'draft')
+      setActiveAnnotationId(null)
+      setDocumentSelection(null)
+      setDialogOpen(false)
+      setHighlightDialogOpen(false)
+      setRedPenDraft('')
+      setRedPenTagDraft(null)
+      setHighlightCommentDraft('')
+      setHighlightTagDraft(null)
+      setHighlightColor('yellow')
+      setLockDialogOpen(false)
+      setStructureChanges([])
+      setStructureDialogOpen(false)
+      setPolishingDialogOpen(false)
+      setExportDialogOpen(false)
+      setExporting(false)
+      setExportError('')
+      setStructureAfterAction('stay')
+      setPendingProposalId(null)
+      setEditSelection(null)
+      setEditingAnnotationId(null)
+      setDeleteTarget(null)
+      lastWarnedEditingRef.current = ''
+      setNotice(`作業データを読み込みました。（Round ${data.workflow.roundNumber}・${phase}）`)
+    } catch {
+      setNotice('作業データを読み込めませんでした。JSONの内容を確認してください。')
+    } finally {
+      event.target.value = ''
+    }
+  }
+
+  const portableFileName = (() => {
+    const baseName = fileName.replace(/\.md$/i, '') || 'metami-proof'
+    const roundNumber = String(reviewRound.number).padStart(3, '0')
+    return `${baseName}_round${roundNumber}_metami-proof.json`
+  })()
+
+  const exportWorkData = () => {
+    if (!originalMarkdown) return
+    if (draftEditing && editingDraftMarkdown !== draftMarkdown) {
+      setNotice('未反映のMarkdown編集があります。本文へ反映またはキャンセルしてから作業データを保存してください。')
+      return
+    }
+    let objectUrl = ''
+    try {
+      const data = buildReviewExportData({
+        sourceFileName: fileName,
+        originalMarkdown,
+        draftMarkdown,
+        reviewRound,
+        reviewers,
+        corrections: annotations,
+        highlights: highlightAnnotations,
+      })
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json;charset=utf-8' })
+      objectUrl = URL.createObjectURL(blob)
+      const anchor = document.createElement('a')
+      anchor.href = objectUrl
+      anchor.download = portableFileName
+      anchor.style.display = 'none'
+      document.body.appendChild(anchor)
+      anchor.click()
+      anchor.remove()
+      setNotice(`作業データ「${portableFileName}」の保存を開始しました。`)
+    } catch {
+      setNotice('作業データの保存を開始できませんでした。現在の作業内容は保持されています。')
+    } finally {
+      if (objectUrl) window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1000)
+    }
+  }
+
+  const reviewHtmlFileName = (() => {
+    const baseName = fileName.replace(/\.md$/i, '') || 'metami-proof'
+    const roundNumber = String(reviewRound.number).padStart(3, '0')
+    return `${baseName}_round${roundNumber}_review.html`
+  })()
+
+  const exportReviewHtml = () => {
+    if (!originalMarkdown) return
+    if (draftEditing && editingDraftMarkdown !== draftMarkdown) {
+      setNotice('未反映のMarkdown編集があります。本文へ反映またはキャンセルしてから校正結果HTMLを出力してください。')
+      return
+    }
+    let objectUrl = ''
+    try {
+      const data = buildReviewExportData({
+        sourceFileName: fileName,
+        originalMarkdown,
+        draftMarkdown,
+        reviewRound,
+        reviewers,
+        corrections: annotations,
+        highlights: highlightAnnotations,
+      })
+      const blob = new Blob([renderReviewHtml(data)], { type: 'text/html;charset=utf-8' })
+      objectUrl = URL.createObjectURL(blob)
+      const anchor = document.createElement('a')
+      anchor.href = objectUrl
+      anchor.download = reviewHtmlFileName
+      anchor.style.display = 'none'
+      document.body.appendChild(anchor)
+      anchor.click()
+      anchor.remove()
+      setNotice(`校正結果HTML「${reviewHtmlFileName}」の保存を開始しました。`)
+    } catch {
+      setNotice('校正結果HTMLの保存を開始できませんでした。現在の作業内容は保持されています。')
+    } finally {
+      if (objectUrl) window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1000)
+    }
   }
 
   const captureDocumentSelection = () => {
@@ -132,7 +314,7 @@ function App() {
       setDocumentSelection(null)
       setNotice(reason)
       debugInfo.rejectionReason = reason
-      if (import.meta.env.DEV) console.debug('[RpenProof selection]', debugInfo)
+      if (import.meta.env.DEV) console.debug('[METAMI Proof selection]', debugInfo)
     }
 
     if (range.startContainer.nodeType !== Node.TEXT_NODE || range.endContainer.nodeType !== Node.TEXT_NODE) {
@@ -193,7 +375,7 @@ function App() {
       rejectSelection('原文上の対応範囲を安全に確認できませんでした。')
       return
     }
-    if (annotations.some(annotation => sourceStart < annotation.sourceEnd && sourceEnd > annotation.sourceStart)) {
+    if (activeTool === 'redPen' && annotations.some(annotation => sourceStart < annotation.sourceEnd && sourceEnd > annotation.sourceStart)) {
       rejectSelection('既存の赤ペン指示と重なる範囲は選択できません。')
       return
     }
@@ -221,13 +403,25 @@ function App() {
         multipleNodes: range.startContainer !== range.endContainer,
       },
     })
+    setRedPenDraft(targetText)
+    setRedPenTagDraft(null)
+    setHighlightCommentDraft('')
+    setHighlightTagDraft(null)
     debugInfo.rejectionReason = null
-    if (import.meta.env.DEV) console.debug('[RpenProof selection]', debugInfo)
-    setNotice('校正対象を保持しました。ヘッダーの「赤ペン」を押してください。Escで選択を解除できます。')
+    if (import.meta.env.DEV) console.debug('[METAMI Proof selection]', debugInfo)
+    if (activeTool === 'redPen') {
+      setNotice('赤ペンの校正対象を選択しました。修正案を入力してください。')
+      setDialogOpen(true)
+    } else if (activeTool === 'highlighter') {
+      setNotice('蛍光範囲を選択しました。必要に応じてコメントを入力してください。')
+      setHighlightDialogOpen(true)
+    } else {
+      setNotice('青ペンを選択中です。青ペンannotationは今後のStepで追加予定です。')
+    }
     browserSelection.removeAllRanges()
   }
 
-  const addAnnotation = (replacementText: string) => {
+  const addAnnotation = (replacementText: string, tag: ReviewTag | null) => {
     if (!documentSelection || !canAddAnnotations) return
     const originalAnchor = {
       targetText: documentSelection.targetText,
@@ -244,7 +438,7 @@ function App() {
       blockType: documentSelection.blockType,
     }
     const annotation: RedPenAnnotation = {
-      id: `anno_${String(annotations.length + 1).padStart(4, '0')}`,
+      id: createAnnotationId('anno'),
       type: 'red_pen',
       targetText: documentSelection.targetText,
       sourceText: documentSelection.sourceText,
@@ -263,12 +457,101 @@ function App() {
       anchorStatus: 'resolved',
       originalAnchor,
       draftAnchor: { start: documentSelection.sourceStart, end: documentSelection.sourceEnd, method: 'offset', confidence: 1 },
+      reviewer: { id: currentReviewer.id, name: currentReviewer.name },
+      createdAt: new Date().toISOString(),
+      tag,
     }
     setAnnotations(current => [...current, annotation])
     setActiveAnnotationId(annotation.id)
     setDialogOpen(false)
     setDocumentSelection(null)
     setNotice(`赤ペン修正「${annotation.targetText} → ${annotation.replacementText}」を登録しました。`)
+  }
+
+  const addHighlightAnnotation = (comment: string, tag: ReviewTag | null, color: HighlightColor) => {
+    if (!documentSelection || !canAddAnnotations || activeTool !== 'highlighter') return
+    const originalAnchor = {
+      targetText: documentSelection.targetText,
+      sourceText: documentSelection.sourceText,
+      contextBefore: documentSelection.contextBefore,
+      contextAfter: documentSelection.contextAfter,
+      sourceStart: documentSelection.sourceStart,
+      sourceEnd: documentSelection.sourceEnd,
+      startLine: documentSelection.startLine,
+      endLine: documentSelection.endLine,
+      nodePath: documentSelection.nodePath,
+      paragraphId: documentSelection.paragraphId,
+      blockText: documentSelection.blockText,
+      blockType: documentSelection.blockType,
+    }
+    const highlight: HighlightAnnotation = {
+      ...originalAnchor,
+      id: createAnnotationId('highlight'),
+      type: 'highlight',
+      color,
+      comment: comment || null,
+      reviewer: { id: currentReviewer.id, name: currentReviewer.name },
+      createdAt: new Date().toISOString(),
+      originalAnchor,
+      tag,
+    }
+    setHighlightAnnotations(current => [...current, highlight])
+    setActiveAnnotationId(highlight.id)
+    setHighlightDialogOpen(false)
+    setDocumentSelection(null)
+    const colorLabel = color === 'green' ? '緑' : '黄色'
+    setNotice(comment ? `${colorLabel}蛍光とコメントを登録しました。` : `${colorLabel}蛍光を登録しました。`)
+    window.getSelection()?.removeAllRanges()
+  }
+
+  const switchSelectionTool = (nextTool: 'redPen' | 'highlighter') => {
+    if (!canAddAnnotations) return
+    const redPenHasInput = dialogOpen && (redPenDraft !== documentSelection?.targetText || redPenTagDraft !== null)
+    const highlightHasInput = highlightDialogOpen && (highlightCommentDraft.trim() !== '' || highlightTagDraft !== null)
+    if ((redPenHasInput || highlightHasInput) && !window.confirm('入力済みの内容は引き継がれません。ペンを持ち替えますか？')) return
+
+    setActiveTool(nextTool)
+    setDialogOpen(nextTool === 'redPen' && Boolean(documentSelection))
+    setHighlightDialogOpen(nextTool === 'highlighter' && Boolean(documentSelection))
+    setRedPenDraft(documentSelection?.targetText ?? '')
+    setRedPenTagDraft(null)
+    setHighlightCommentDraft('')
+    setHighlightTagDraft(null)
+    if (documentSelection) setNotice(nextTool === 'redPen' ? '選択範囲を保持したまま赤ペンへ切り替えました。' : '選択範囲を保持したまま蛍光ペンへ切り替えました。')
+  }
+
+  const changeActiveTool = (tool: ActiveTool) => {
+    if (tool === activeTool) return
+    if ((tool === 'redPen' || tool === 'highlighter') && documentSelection && (dialogOpen || highlightDialogOpen)) {
+      switchSelectionTool(tool)
+      return
+    }
+    setActiveTool(tool)
+  }
+
+  const requestAnnotationDelete = (annotationId: string) => {
+    if (reviewRound.phase !== 'reviewing') return
+    if (annotations.some(annotation => annotation.id === annotationId)) {
+      setDeleteTarget({ kind: 'red_pen', id: annotationId })
+    } else if (highlightAnnotations.some(annotation => annotation.id === annotationId)) {
+      setDeleteTarget({ kind: 'highlight', id: annotationId })
+    }
+    setDocumentSelection(null)
+    setDialogOpen(false)
+    setHighlightDialogOpen(false)
+    window.getSelection()?.removeAllRanges()
+  }
+
+  const confirmAnnotationDelete = () => {
+    if (!deleteTarget || reviewRound.phase !== 'reviewing') return
+    if (deleteTarget.kind === 'red_pen') {
+      setAnnotations(current => current.filter(annotation => annotation.id !== deleteTarget.id))
+    } else {
+      setHighlightAnnotations(current => current.filter(annotation => annotation.id !== deleteTarget.id))
+    }
+    if (activeAnnotationId === deleteTarget.id) setActiveAnnotationId(null)
+    setNotice('')
+    setDeleteTarget(null)
   }
 
   const beginDraftEditing = () => {
@@ -426,8 +709,14 @@ function App() {
 
   const selectAnnotation = (annotationId: string) => {
     const annotation = annotations.find(item => item.id === annotationId)
-    if (!annotation) return
+    const highlight = highlightAnnotations.find(item => item.id === annotationId)
+    if (!annotation && !highlight) return
     setActiveAnnotationId(annotationId)
+    if (highlight) {
+      pulseAnnotation(annotationId, 'original')
+      return
+    }
+    if (!annotation) return
     if (annotation.anchorStatus === 'resolved' && !draftEditing) {
       pulseAnnotation(annotationId, 'draft')
     } else {
@@ -526,6 +815,8 @@ function App() {
     if (!allReviewersCompleted || reviewRound.phase !== 'reviewing') return
     setLockDialogOpen(false)
     setReviewRound(current => ({ ...current, phase: 'locked', lockedAt: new Date().toISOString() }))
+    setPaneLayout('sideBySide')
+    setActiveTool('redPen')
     window.setTimeout(() => setReviewRound(current => current.phase === 'locked' ? { ...current, phase: 'revising' } : current), 0)
     setNotice('校正内容をロックし、修正フェーズへ移行しました。')
   }
@@ -534,7 +825,7 @@ function App() {
     if (reviewRound.phase !== 'revising' || pendingAnnotations.length > 0) return
     setPolishingDialogOpen(false)
     setReviewRound(current => ({ ...current, phase: 'polishing' }))
-    setPolishingView('draftFocus')
+    setPaneLayout('revisionOnly')
     setSidebarOpen(false)
     setActiveAnnotationId(null)
     setEditingDraftMarkdown(draftMarkdown)
@@ -543,7 +834,7 @@ function App() {
   }
 
   const completedFileName = (() => {
-    const baseName = fileName.replace(/\.md$/i, '') || 'akapen-proof'
+    const baseName = fileName.replace(/\.md$/i, '') || 'metami-proof'
     const roundNumber = String(reviewRound.number).padStart(3, '0')
     return `${baseName}_round${roundNumber}.md`
   })()
@@ -581,7 +872,7 @@ function App() {
       setExportDialogOpen(false)
       setReviewRound(current => ({ ...current, phase: 'completed' }))
       setDraftEditing(false)
-      setPolishingView('draftFocus')
+      setPaneLayout('revisionOnly')
       setSidebarOpen(false)
       setNotice('完成版Markdownを出力し、このラウンドを完了しました。')
     } catch {
@@ -601,45 +892,51 @@ function App() {
   }
 
   const isPolishing = reviewRound.phase === 'polishing'
+  const eraserActive = activeTool === 'eraser' && reviewRound.phase === 'reviewing'
   const hideDraftAnnotations = isPolishing || reviewRound.phase === 'completed'
   const panes = {
-    original: <DocumentPane kind="original" markdown={originalMarkdown} fileName={fileName} annotations={annotations} documentSelection={documentSelection} activeAnnotationId={activeAnnotationId} onOriginalSelection={canAddAnnotations ? captureDocumentSelection : undefined} onAnnotationClick={selectAnnotation} />,
-    draft: <DocumentPane kind="draft" markdown={draftMarkdown} fileName={fileName} annotations={hideDraftAnnotations ? [] : annotations} activeAnnotationId={activeAnnotationId} draftEditing={draftEditing} draftCanEdit={reviewRound.phase === 'revising' || reviewRound.phase === 'polishing'} editingMarkdown={editingDraftMarkdown} directEditing={isPolishing} editSelection={editSelection} onAnnotationClick={selectAnnotation} onDraftEditingChange={setDraftEditing} onBeginDraftEditing={beginDraftEditing} onEditingDraftChange={isPolishing ? updatePolishingDraft : setEditingDraftMarkdown} onCancelDraftEditing={cancelDraftEditing} onApplyDraftEditing={requestDraftCommit} onRequestPreview={requestPolishingPreview} />,
+    original: <DocumentPane kind="original" markdown={originalMarkdown} fileName={fileName} annotations={annotations} highlights={highlightAnnotations} documentSelection={documentSelection} activeAnnotationId={activeAnnotationId} onOriginalSelection={canAddAnnotations ? captureDocumentSelection : undefined} onAnnotationClick={selectAnnotation} eraserActive={eraserActive} onAnnotationDeleteRequest={requestAnnotationDelete} />,
+    draft: <DocumentPane kind="draft" markdown={draftMarkdown} fileName={fileName} annotations={hideDraftAnnotations ? [] : annotations} highlights={[]} activeAnnotationId={activeAnnotationId} draftEditing={draftEditing} draftCanEdit={reviewRound.phase === 'revising' || reviewRound.phase === 'polishing'} editingMarkdown={editingDraftMarkdown} directEditing={isPolishing} editSelection={editSelection} onAnnotationClick={selectAnnotation} onDraftEditingChange={setDraftEditing} onBeginDraftEditing={beginDraftEditing} onEditingDraftChange={isPolishing ? updatePolishingDraft : setEditingDraftMarkdown} onCancelDraftEditing={cancelDraftEditing} onApplyDraftEditing={requestDraftCommit} onRequestPreview={requestPolishingPreview} />,
   }
   const paneOrder: MobilePane[] = swapped ? ['draft', 'original'] : ['original', 'draft']
-  const visiblePanes = isPolishing && polishingView === 'draftFocus' ? ['draft' as const] : paneOrder
-  const showSidebar = sidebarOpen && (!isPolishing || polishingView === 'split')
+  const visiblePanes: MobilePane[] = paneLayout === 'reviewOnly' ? ['original'] : paneLayout === 'revisionOnly' ? ['draft'] : paneOrder
+  const showSidebar = sidebarOpen
 
   return (
     <div className="app-shell">
       <input ref={fileInputRef} className="visually-hidden" type="file" accept=".md,text/markdown,text/plain" onChange={loadMarkdown} />
-      <Header onOpenFile={() => fileInputRef.current?.click()} onSwap={() => setSwapped(value => !value)} onToggleSidebar={() => {
-        if (isPolishing && polishingView === 'draftFocus') {
-          setPolishingView('split')
-          setSidebarOpen(true)
-        } else setSidebarOpen(value => !value)
-      }} onRedPen={() => canAddAnnotations && documentSelection && setDialogOpen(true)} sidebarOpen={showSidebar} canUseRedPen={canAddAnnotations && Boolean(documentSelection)} annotationCount={annotations.length} pendingCount={pendingAnnotations.length} onPreviousPending={() => movePending(-1)} onNextPending={() => movePending(1)} phase={reviewRound.phase} reviewerCompletedCount={reviewers.filter(reviewer => reviewer.status === 'completed').length} reviewerCount={reviewers.length} onCompleteReview={completeCurrentReview} canStartPolishing={reviewRound.phase === 'revising' && pendingAnnotations.length === 0} onStartPolishing={() => setPolishingDialogOpen(true)} canCompletePolishing={!structureDialogOpen} onCompletePolishing={requestPolishingCompletion} />
-      {notice && <div className={`selection-notice ${documentSelection ? 'ready' : ''}`} role="status"><span>{notice}</span><button className="notice-close" type="button" onClick={clearDocumentSelection} aria-label="選択または通知を閉じる">×</button></div>}
-      {(!isPolishing || polishingView === 'split') && <div className="mobile-tabs" role="tablist" aria-label="表示する文書">
+      <input ref={workDataInputRef} className="visually-hidden" type="file" accept=".json,application/json" onChange={loadWorkData} />
+      <div className="sticky-header-stack">
+        <Header onOpenFile={() => fileInputRef.current?.click()} onPasteMarkdown={() => setPasteDialogOpen(true)} onOpenWorkData={() => workDataInputRef.current?.click()} onExportWorkData={exportWorkData} canExportWorkData={Boolean(originalMarkdown)} onExportMarkdown={requestPolishingCompletion} canExportMarkdown={reviewRound.phase === 'polishing' && !structureDialogOpen} onExportReviewHtml={exportReviewHtml} canExportReviewHtml={Boolean(originalMarkdown)} onSwap={() => paneLayout === 'sideBySide' && setSwapped(value => !value)} onToggleSidebar={() => setSidebarOpen(value => !value)} activeTool={activeTool} onToolChange={changeActiveTool} paneLayout={paneLayout} onPaneLayoutChange={setPaneLayout} sidebarOpen={showSidebar} canSelectTools={canAddAnnotations} annotationCount={annotations.length} pendingCount={pendingAnnotations.length} onPreviousPending={() => movePending(-1)} onNextPending={() => movePending(1)} phase={reviewRound.phase} reviewerCompletedCount={reviewers.filter(reviewer => reviewer.status === 'completed').length} reviewerCount={reviewers.length} onCompleteReview={completeCurrentReview} canStartPolishing={reviewRound.phase === 'revising' && pendingAnnotations.length === 0} onStartPolishing={() => setPolishingDialogOpen(true)} />
+        {notice && <div className={`selection-notice ${documentSelection ? 'ready' : ''}`} role="status"><span>{notice}</span><button className="notice-close" type="button" onClick={clearDocumentSelection} aria-label="選択または通知を閉じる">×</button></div>}
+      </div>
+      {paneLayout === 'sideBySide' && <div className="mobile-tabs" role="tablist" aria-label="表示する文書">
         <button type="button" role="tab" aria-selected={mobilePane === 'original'} onClick={() => setMobilePane('original')}>原本</button>
         <button type="button" role="tab" aria-selected={mobilePane === 'draft'} onClick={() => setMobilePane('draft')}>修正文書</button>
       </div>}
-      <main className={`workspace ${showSidebar ? '' : 'sidebar-closed'} ${isPolishing ? `polishing ${polishingView}` : ''}`}>
-        <div className={`document-grid ${isPolishing && polishingView === 'draftFocus' ? 'draft-focus-grid' : ''}`}>
-          {visiblePanes.map(kind => <div className={`pane-slot mobile-${kind} ${mobilePane === kind || (isPolishing && polishingView === 'draftFocus') ? 'mobile-active' : ''}`} key={kind}>{panes[kind]}</div>)}
+      <main className={`workspace ${showSidebar ? '' : 'sidebar-closed'} layout-${paneLayout}`}>
+        <div className={`document-grid ${paneLayout !== 'sideBySide' ? 'single-pane-grid' : ''}`}>
+          {visiblePanes.map(kind => <div className={`pane-slot mobile-${kind} ${paneLayout !== 'sideBySide' || mobilePane === kind ? 'mobile-active' : ''}`} key={kind}>{panes[kind]}</div>)}
         </div>
-        {showSidebar && <Sidebar annotations={annotations} activeAnnotationId={activeAnnotationId} onClose={() => setSidebarOpen(false)} onSelectAnnotation={selectAnnotation} onComplete={completeAnnotation} onApplyProposal={applyAnnotationProposal} onEdit={editAnnotation} onReopen={reopenAnnotation} phase={reviewRound.phase} />}
+        {showSidebar && <Sidebar annotations={annotations} highlights={highlightAnnotations} activeAnnotationId={activeAnnotationId} onClose={() => setSidebarOpen(false)} onSelectAnnotation={selectAnnotation} onComplete={completeAnnotation} onApplyProposal={applyAnnotationProposal} onEdit={editAnnotation} onReopen={reopenAnnotation} onDeleteRequest={requestAnnotationDelete} phase={reviewRound.phase} />}
       </main>
-      {isPolishing && <div className="polishing-view-switch">
-        {polishingView === 'draftFocus'
-          ? <button type="button" onClick={() => { setPolishingView('split'); setSidebarOpen(true) }}>▸ 校正済み原稿・修正履歴を表示</button>
-          : <button type="button" onClick={() => { setPolishingView('draftFocus'); setSidebarOpen(false) }}>修正文書メイン表示へ戻る</button>}
-      </div>}
-      {dialogOpen && documentSelection && <RedPenDialog selection={documentSelection} onCancel={clearDocumentSelection} onSubmit={addAnnotation} />}
+      {dialogOpen && documentSelection && <RedPenDialog selection={documentSelection} replacementText={redPenDraft} tag={redPenTagDraft} onReplacementTextChange={setRedPenDraft} onTagChange={setRedPenTagDraft} onSwitchTool={() => switchSelectionTool('highlighter')} onCancel={clearDocumentSelection} onSubmit={addAnnotation} />}
+      {highlightDialogOpen && documentSelection && <HighlightDialog selection={documentSelection} comment={highlightCommentDraft} color={highlightColor} tag={highlightTagDraft} onCommentChange={setHighlightCommentDraft} onColorChange={setHighlightColor} onTagChange={setHighlightTagDraft} onSwitchTool={() => switchSelectionTool('redPen')} onCancel={clearDocumentSelection} onSubmit={addHighlightAnnotation} />}
+      {pasteDialogOpen && <PasteMarkdownDialog onCancel={() => setPasteDialogOpen(false)} onStart={markdown => startReview(markdown, 'pasted_markdown.md')} />}
       {lockDialogOpen && <ReviewLockDialog onCancel={() => setLockDialogOpen(false)} onConfirm={confirmReviewLock} />}
       {structureDialogOpen && <MarkdownStructureDialog changes={structureChanges} onBack={returnToStructureEditing} onApply={commitDraftEditing} applyLabel={isPolishing ? 'このまま変更' : 'このまま反映'} />}
       {polishingDialogOpen && <PolishingConfirmDialog onCancel={() => setPolishingDialogOpen(false)} onConfirm={enterPolishing} />}
       {exportDialogOpen && <MarkdownExportDialog fileName={completedFileName} exporting={exporting} error={exportError} onBack={() => { setExportDialogOpen(false); setExportError('') }} onExport={exportCompletedMarkdown} />}
+      {deleteTarget && (() => {
+        const annotation = deleteTarget.kind === 'red_pen'
+          ? annotations.find(item => item.id === deleteTarget.id)
+          : highlightAnnotations.find(item => item.id === deleteTarget.id)
+        if (!annotation) return null
+        const target = deleteTarget.kind === 'red_pen'
+          ? { kind: 'red_pen' as const, annotation: annotation as RedPenAnnotation }
+          : { kind: 'highlight' as const, annotation: annotation as HighlightAnnotation }
+        return <AnnotationDeleteDialog target={target} onCancel={() => setDeleteTarget(null)} onConfirm={confirmAnnotationDelete} />
+      })()}
     </div>
   )
 }
