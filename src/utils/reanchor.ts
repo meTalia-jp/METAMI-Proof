@@ -58,17 +58,17 @@ const blockAt = (markdown: string, position: number) => {
 }
 
 export function resolveDraftAnchor(markdown: string, annotation: RedPenAnnotation): { anchorStatus: 'resolved' | 'unresolved'; draftAnchor: DraftAnchor | null } {
-  const expected = annotation.draftAnchorText ?? annotation.originalAnchor?.sourceText ?? annotation.sourceText
+  const expected = annotation.draftAnchor?.text ?? annotation.originalAnchor.sourceText
   const previous = annotation.draftAnchor ?? { start: annotation.sourceStart, end: annotation.sourceEnd, method: 'offset' as const }
 
-  if (expected && markdown.slice(previous.start, previous.end) === expected) {
-    return { anchorStatus: 'resolved', draftAnchor: { start: previous.start, end: previous.end, method: 'offset', confidence: 1 } }
+  if (annotation.draftAnchor && markdown.slice(previous.start, previous.end) === expected) {
+    return { anchorStatus: 'resolved', draftAnchor: { start: previous.start, end: previous.end, text: expected, method: 'offset', confidence: 1 } }
   }
 
   const positions = occurrences(markdown, expected)
   if (positions.length === 0) return { anchorStatus: 'unresolved', draftAnchor: null }
   if (positions.length === 1) {
-    return { anchorStatus: 'resolved', draftAnchor: { start: positions[0], end: positions[0] + expected.length, method: 'context', confidence: 1 } }
+    return { anchorStatus: 'resolved', draftAnchor: { start: positions[0], end: positions[0] + expected.length, text: expected, method: 'context', confidence: 1 } }
   }
 
   const original = annotation.originalAnchor ?? annotation
@@ -79,6 +79,7 @@ export function resolveDraftAnchor(markdown: string, annotation: RedPenAnnotatio
     return {
       start,
       end: start + expected.length,
+      text: expected,
       method: 'context',
       contextScore,
       blockScore: original.blockText ? blockSimilarity(blockAt(markdown, start), original.blockText) : 0,
@@ -89,13 +90,13 @@ export function resolveDraftAnchor(markdown: string, annotation: RedPenAnnotatio
   const byContext = [...candidates].sort((a, b) => b.contextScore - a.contextScore || a.distance - b.distance)
   if (byContext[0].contextScore >= 0.6 && byContext[0].contextScore - byContext[1].contextScore >= 0.15) {
     const winner = byContext[0]
-    return { anchorStatus: 'resolved', draftAnchor: { start: winner.start, end: winner.end, method: 'context', confidence: winner.contextScore } }
+    return { anchorStatus: 'resolved', draftAnchor: { start: winner.start, end: winner.end, text: expected, method: 'context', confidence: winner.contextScore } }
   }
 
   const byBlock = [...candidates].sort((a, b) => b.blockScore - a.blockScore || b.contextScore - a.contextScore || a.distance - b.distance)
   if (byBlock[0].blockScore >= 0.75 && byBlock[0].blockScore - byBlock[1].blockScore >= 0.15) {
     const winner = byBlock[0]
-    return { anchorStatus: 'resolved', draftAnchor: { start: winner.start, end: winner.end, method: 'block', confidence: winner.blockScore } }
+    return { anchorStatus: 'resolved', draftAnchor: { start: winner.start, end: winner.end, text: expected, method: 'block', confidence: winner.blockScore } }
   }
 
   return { anchorStatus: 'unresolved', draftAnchor: null }

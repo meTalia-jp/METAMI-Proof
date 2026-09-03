@@ -17,7 +17,7 @@ export function AnnotationDeleteDialog({ target, onCancel, onConfirm }: Annotati
         <div className="delete-confirm-details">
           <p><span>対象</span><output>{target.annotation.targetText}</output></p>
           {isRedPen
-            ? <p><span>修正案</span><output>{target.annotation.replacementText}</output></p>
+            ? <p><span>レビュー</span><output>{target.annotation.reviewText ?? target.annotation.replacementText ?? '（なし）'}</output></p>
             : target.annotation.comment && <p><span>コメント</span><output>{target.annotation.comment}</output></p>}
         </div>
         <p className="delete-warning">本文Markdownは変更されません。校正マークだけを削除します。</p>

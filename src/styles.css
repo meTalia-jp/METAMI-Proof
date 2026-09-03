@@ -148,6 +148,9 @@ button:focus-visible { outline: 3px solid rgba(40, 90, 145, .3); outline-offset:
 .pending-navigation button { min-height: 32px; padding: 4px 10px 5px; overflow: visible; border: 1px solid #c9b99e; border-radius: 4px; color: #5f5548; background: #fffdf7; cursor: pointer; font-family: "Yu Gothic", sans-serif; font-size: 12px; font-weight: 700; line-height: 1.55; }
 .pending-navigation button:disabled { opacity: .42; cursor: default; }
 .selection-notice { position: relative; z-index: 2; display: flex; align-items: center; justify-content: center; gap: 10px; min-height: 44px; padding: 8px 46px 8px 16px; color: #6f4f18; background: #fcefc7; border-bottom: 1px solid #dbc88f; box-shadow: 0 3px 8px rgba(55,45,30,.1); font-size: 14px; font-weight: 700; }
+.selection-notice > span { white-space: pre-line; }
+.selection-notice.floating-format-error { position: fixed; z-index: 100; top: 18px; right: 18px; width: min(480px, calc(100vw - 36px)); min-height: 0; justify-content: flex-start; padding: 16px 48px 16px 18px; color: #762b27; background: #fff8ed; border: 1px solid #d8897e; border-left: 5px solid var(--shu); border-radius: 7px; box-shadow: 0 12px 34px rgba(55,35,25,.25); font-size: 14px; line-height: 1.65; }
+.selection-notice.floating-format-error .notice-close { top: 8px; right: 8px; }
 .selection-notice.ready { color: #7b2826; background: #fff0e8; border-color: #e7b9ac; }
 .selection-notice button { border: 1px solid var(--shu); border-radius: 5px; padding: 4px 9px; color: #fff; background: var(--shu); cursor: pointer; }
 .selection-notice .notice-close { position: absolute; right: 16px; border: 0; color: #766f63; background: transparent; font-size: 18px; }
@@ -186,6 +189,8 @@ button:focus-visible { outline: 3px solid rgba(40, 90, 145, .3); outline-offset:
 .paste-markdown-dialog { width: min(820px, 100%); }
 .paste-markdown-dialog textarea { min-height: 360px; max-height: calc(100vh - 280px); font-family: Consolas, "Yu Gothic", monospace; font-size: 13px; }
 .dialog-help { margin: -4px 0 18px; color: #888176; font-size: 10px; }
+.replacement-toggle { display: flex; align-items: center; gap: 8px; margin: 8px 0 14px; color: #5f5548; font-size: 12px; font-weight: 700; }
+.replacement-toggle input { width: 16px; height: 16px; accent-color: #b92f2b; }
 .review-tag-picker { margin: 0 0 16px; padding: 0; border: 0; }
 .review-tag-picker legend { margin-bottom: 7px; color: #625d54; font-size: 11px; font-weight: 700; }
 .review-tag-buttons { display: flex; flex-wrap: wrap; gap: 6px; }
@@ -311,6 +316,7 @@ button:focus-visible { outline: 3px solid rgba(40, 90, 145, .3); outline-offset:
   .file-button { font-size: 0; }.file-button::after { content: "開く"; font-size: 12px; }
   .mobile-tabs { position: sticky; top: 0; z-index: 15; display: grid; grid-template-columns: 1fr 1fr; padding: 10px 14px 0; background: var(--canvas); }
   .selection-notice { position: relative; top: auto; align-items: flex-start; padding-left: 12px; }
+  .selection-notice.floating-format-error { position: fixed; top: 10px; right: 10px; width: calc(100vw - 20px); padding: 14px 42px 14px 14px; }
   .header-workflow { margin-inline: -12px; margin-bottom: -10px; flex-wrap: wrap; gap: 5px 14px; padding-block: 7px; }
   .mobile-tabs button { padding: 9px; border: 1px solid var(--line); background: #eee9dc; color: #716c62; cursor: pointer; }
   .mobile-tabs button[aria-selected="true"] { z-index: 1; color: var(--shu); background: var(--paper); border-bottom-color: var(--paper); font-weight: 700; }

@@ -97,9 +97,8 @@ function createSourcePositionPlugin(markdown: string, annotations: RedPenAnnotat
     const activeRanges = [
       ...annotations
         .filter(annotation => mode === 'original' || (
-          annotation.anchorStatus === 'resolved'
-          && annotation.draftAnchor
-          && markdown.slice(annotation.draftAnchor.start, annotation.draftAnchor.end) === annotation.sourceText
+          annotation.draftAnchor
+          && markdown.slice(annotation.draftAnchor.start, annotation.draftAnchor.end) === annotation.draftAnchor.text
         ))
         .map(annotation => ({
           kind: 'annotation' as const,
@@ -196,7 +195,8 @@ function createSourcePositionPlugin(markdown: string, annotations: RedPenAnnotat
             const reviewProperties = { 'data-review-id': range.id, 'data-review-type': 'correction' }
             const children = [elementNode('span', { className: ['del'], ...reviewProperties }, [textNode(visiblePart)])]
             if (lastRecord.get(range.id) === child) {
-              children.push(elementNode('span', { className: ['ins'], 'aria-label': `レビュー：${range.anchor.replacementText}`, ...reviewProperties }, [textNode(range.anchor.replacementText)]))
+              const proposal = range.anchor.replacementText ?? range.anchor.reviewText ?? ''
+              children.push(elementNode('span', { className: ['ins'], 'aria-label': `レビュー：${proposal}`, ...reviewProperties }, [textNode(proposal)]))
               if (completed) children.push(elementNode('span', { className: ['annotation-complete-mark'], 'aria-label': '確認完了' }, [textNode('✓')]))
             }
             result.push(elementNode('span', {

@@ -1,7 +1,7 @@
 export type AnnotationStatus = 'pending' | 'completed_changed' | 'completed_unchanged'
 export type AnchorStatus = 'resolved' | 'unresolved'
-export type DraftAnchorMethod = 'offset' | 'context' | 'block' | 'fuzzy' | 'manual'
-export type HighlightColor = 'yellow' | 'green' | 'pink' | 'cyan'
+export type DraftAnchorMethod = 'offset' | 'context' | 'block'
+export type HighlightColor = 'yellow' | 'green'
 export type ReviewTag = 'question' | 'rewrite' | 'delete' | 'add' | 'fact_check' | 'note'
 
 export type TextAnchor = {
@@ -24,6 +24,7 @@ export type OriginalAnchor = TextAnchor
 export type DraftAnchor = {
   start: number
   end: number
+  text: string
   method: DraftAnchorMethod
   confidence?: number
 }
@@ -31,14 +32,14 @@ export type DraftAnchor = {
 export type RedPenAnnotation = TextAnchor & {
   id: string
   type: 'red_pen'
-  replacementText: string
+  reviewText?: string
+  replacementText?: string
   status: AnnotationStatus
   anchorStatus: AnchorStatus
   originalAnchor: OriginalAnchor
   draftAnchor: DraftAnchor | null
-  draftAnchorText?: string
   proposalApplied?: boolean
-  completedText?: string
+  resultText?: string
   reviewer?: { id: string; name: string }
   createdAt?: string
   tag?: ReviewTag | null

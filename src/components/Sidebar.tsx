@@ -49,14 +49,15 @@ export function Sidebar({ annotations, highlights, activeAnnotationId, onClose, 
             <span className={`workflow-status ${activeAnnotation.status}`}>{statusLabel(activeAnnotation)}</span>
             <div className="instruction-details">
               <p><span>元の校正対象</span><del>{activeAnnotation.targetText}</del></p>
-              <p><span>修正案</span><strong>{activeAnnotation.replacementText}</strong></p>
-              {activeAnnotation.completedText !== undefined && <p><span>前回の修正結果</span><output>{activeAnnotation.completedText || '（該当テキストなし）'}</output></p>}
+              {activeAnnotation.reviewText !== undefined && <p><span>レビュー内容</span><output>{activeAnnotation.reviewText}</output></p>}
+              {activeAnnotation.replacementText !== undefined && <p><span>置換案</span><strong>{activeAnnotation.replacementText || '（削除）'}</strong></p>}
+              {activeAnnotation.resultText !== undefined && <p><span>完了時の結果</span><output>{activeAnnotation.resultText || '（該当テキストなし）'}</output></p>}
             </div>
             {activeAnnotation.anchorStatus === 'unresolved' && <p className="anchor-warning">⚠ 対応位置を自動特定できません。原本側の指示を確認してください。</p>}
             {activeAnnotation.status === 'pending' && phase === 'revising' && (
               <div className="annotation-actions">
                 <div className="editing-actions">
-                  <button type="button" onClick={() => onApplyProposal(activeAnnotation.id)} disabled={activeAnnotation.anchorStatus !== 'resolved' || activeAnnotation.proposalApplied} title={activeAnnotation.anchorStatus === 'unresolved' ? '修正文書内の対応位置を特定できないため、自動適用できません' : ''}>{activeAnnotation.proposalApplied ? '適用済み' : '修正案を適用'}</button>
+                  <button type="button" onClick={() => onApplyProposal(activeAnnotation.id)} disabled={!activeAnnotation.draftAnchor || activeAnnotation.proposalApplied || activeAnnotation.replacementText === undefined} title={!activeAnnotation.draftAnchor ? '修正文書内の対応位置を特定できないため、自動適用できません' : activeAnnotation.replacementText === undefined ? '適用可能な置換案がありません' : ''}>{activeAnnotation.proposalApplied ? '適用済み' : '修正案を適用'}</button>
                   <button type="button" onClick={() => onEdit(activeAnnotation.id)}>修正・加筆</button>
                 </div>
                 <div className="completion-actions">
@@ -110,7 +111,7 @@ export function Sidebar({ annotations, highlights, activeAnnotationId, onClose, 
             {pending.map(annotation => (
               <li key={annotation.id}>
                 <button type="button" className={`annotation-select-button ${annotation.id === activeAnnotationId ? 'active' : ''}`} onClick={() => onSelectAnnotation(annotation.id)}>
-                  <span>{annotation.targetText}</span><small>{annotation.anchorStatus === 'unresolved' ? '⚠ 原本を確認' : `→ ${annotation.replacementText}`}</small>
+                  <span>{annotation.targetText}</span><small>{!annotation.draftAnchor ? '⚠ 原本を確認' : annotation.replacementText !== undefined ? `→ ${annotation.replacementText || '（削除）'}` : annotation.reviewText}</small>
                 </button>
                 {phase === 'reviewing' && <button type="button" className="annotation-delete-button" onClick={() => onDeleteRequest(annotation.id)} aria-label={`赤ペン「${annotation.targetText}」を削除`}>削除</button>}
               </li>

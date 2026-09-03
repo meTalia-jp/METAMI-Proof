@@ -11,17 +11,49 @@ import { MarkdownExportDialog } from './components/MarkdownExportDialog'
 import { AnnotationDeleteDialog } from './components/AnnotationDeleteDialog'
 import { PasteMarkdownDialog } from './components/PasteMarkdownDialog'
 import type { DocumentSelection, HighlightAnnotation, HighlightColor, RedPenAnnotation, ReviewTag } from './types/annotation'
+import type { ExportOriginalAnchor } from './types/portableReview'
 import { areAllReviewersCompleted, type Reviewer, type ReviewRound } from './types/review'
 import { reanchorPendingAnnotations } from './utils/reanchor'
 import { detectMarkdownStructureChanges, type MarkdownStructureChange } from './utils/markdownStructure'
 import { buildReviewExportData, createAnnotationId, validateReviewExportData } from './utils/portableReview'
 import { renderReviewHtml } from './utils/renderReviewHtml'
+import { extractReviewJsonFromHtml, REVIEW_HTML_FORMAT_ERROR } from './utils/reviewHtmlImport'
 
 type MobilePane = 'original' | 'draft'
 type StructureAfterAction = 'stay' | 'preview' | 'export' | 'apply-proposal'
 
 const initialRound = (): ReviewRound => ({ id: 'round_001', number: 1, phase: 'reviewing', lockedAt: null })
 const initialReviewers = (): Reviewer[] => [{ id: 'reviewer_001', name: '校正者', status: 'working' }]
+const toInternalOriginalAnchor = (anchor: ExportOriginalAnchor) => ({
+  targetText: anchor.targetText,
+  sourceText: anchor.sourceText,
+  contextBefore: anchor.contextBefore,
+  contextAfter: anchor.contextAfter,
+  sourceStart: anchor.sourceStart,
+  sourceEnd: anchor.sourceEnd,
+  paragraphId: anchor.block?.id,
+  blockType: anchor.block?.type,
+  blockText: anchor.block?.text,
+})
+
+const updateResolvedDraftAnchors = (before: string, after: string, items: RedPenAnnotation[]): RedPenAnnotation[] => {
+  if (before === after) return items
+  let prefix = 0
+  while (prefix < before.length && prefix < after.length && before[prefix] === after[prefix]) prefix += 1
+  let suffix = 0
+  while (suffix < before.length - prefix && suffix < after.length - prefix && before[before.length - 1 - suffix] === after[after.length - 1 - suffix]) suffix += 1
+  const oldChangeEnd = before.length - suffix
+  const delta = after.length - before.length
+  return items.map(annotation => {
+    const anchor = annotation.draftAnchor
+    if (!anchor) return annotation
+    let start = anchor.start
+    let end = anchor.end
+    if (oldChangeEnd <= start) { start += delta; end += delta }
+    else if (prefix < end) { start = Math.min(start, prefix); end = Math.max(start, end + delta) }
+    return { ...annotation, anchorStatus: 'resolved' as const, draftAnchor: { start, end, text: after.slice(start, end), method: 'offset', confidence: 1 } }
+  })
+}
 
 function App() {
   const [originalMarkdown, setOriginalMarkdown] = useState('')
@@ -37,7 +69,9 @@ function App() {
   const [documentSelection, setDocumentSelection] = useState<DocumentSelection | null>(null)
   const [dialogOpen, setDialogOpen] = useState(false)
   const [highlightDialogOpen, setHighlightDialogOpen] = useState(false)
+  const [redPenReviewDraft, setRedPenReviewDraft] = useState('')
   const [redPenDraft, setRedPenDraft] = useState('')
+  const [redPenReplacementEnabled, setRedPenReplacementEnabled] = useState(true)
   const [redPenTagDraft, setRedPenTagDraft] = useState<ReviewTag | null>(null)
   const [highlightCommentDraft, setHighlightCommentDraft] = useState('')
   const [highlightTagDraft, setHighlightTagDraft] = useState<ReviewTag | null>(null)
@@ -74,7 +108,9 @@ function App() {
     setDocumentSelection(null)
     setDialogOpen(false)
     setHighlightDialogOpen(false)
+    setRedPenReviewDraft('')
     setRedPenDraft('')
+    setRedPenReplacementEnabled(true)
     setRedPenTagDraft(null)
     setHighlightCommentDraft('')
     setHighlightTagDraft(null)
@@ -99,7 +135,9 @@ function App() {
     setDocumentSelection(null)
     setDialogOpen(false)
     setHighlightDialogOpen(false)
+    setRedPenReviewDraft('')
     setRedPenDraft('')
+    setRedPenReplacementEnabled(true)
     setRedPenTagDraft(null)
     setHighlightCommentDraft('')
     setHighlightTagDraft(null)
@@ -140,7 +178,18 @@ function App() {
     const file = event.target.files?.[0]
     if (!file) return
     try {
-      const parsed: unknown = JSON.parse(await file.text())
+      const fileText = await file.text()
+      let parsed: unknown
+      if (/\.html?$/i.test(file.name) || file.type === 'text/html') {
+        const extracted = extractReviewJsonFromHtml(fileText)
+        if (!extracted.ok) {
+          setNotice(extracted.error)
+          return
+        }
+        parsed = extracted.value
+      } else {
+        parsed = JSON.parse(fileText)
+      }
       const validated = validateReviewExportData(parsed)
       if (!validated.ok) {
         setNotice(`作業データを読み込めませんでした。${validated.error}`)
@@ -148,23 +197,48 @@ function App() {
       }
 
       const data = validated.data
-      const phase = data.workflow.phase === 'locked' ? 'revising' : data.workflow.phase
+      const phase = data.round.phase === 'locked' ? 'revising' : data.round.phase
       const restoredRound: ReviewRound = {
-        id: data.workflow.roundId,
-        number: data.workflow.roundNumber,
+        id: data.round.id,
+        number: data.round.number,
         phase,
-        lockedAt: data.workflow.lockedAt,
+        lockedAt: data.round.lockedAt ?? null,
       }
       setOriginalMarkdown(data.document.originalMarkdown)
       setDraftMarkdown(data.document.draftMarkdown)
-      setFileName(data.document.sourceFileName)
-      setAnnotations(data.corrections.map(({ reviewText, ...correction }) => ({
-        ...correction,
-        replacementText: reviewText,
-        reviewer: correction.reviewer ?? undefined,
-        createdAt: correction.createdAt ?? undefined,
-      })))
-      setHighlightAnnotations(data.highlights)
+      setFileName(data.document.sourceFileName ?? 'imported_markdown.md')
+      const reviewerById = new Map(data.reviewers.map(reviewer => [reviewer.id, reviewer]))
+      setAnnotations(data.annotations.filter(annotation => annotation.type === 'red_pen').map(annotation => {
+        const originalAnchor = toInternalOriginalAnchor(annotation.originalAnchor)
+        return ({
+        ...originalAnchor,
+        id: annotation.id,
+        type: 'red_pen' as const,
+        reviewText: annotation.reviewText,
+        replacementText: annotation.replacementText,
+        status: annotation.status,
+        anchorStatus: annotation.draftAnchor ? 'resolved' as const : 'unresolved' as const,
+        originalAnchor,
+        draftAnchor: annotation.draftAnchor,
+        proposalApplied: false,
+        resultText: annotation.resultText,
+        reviewer: reviewerById.get(annotation.reviewerId),
+        createdAt: annotation.createdAt,
+        tag: annotation.tag,
+      })}))
+      setHighlightAnnotations(data.annotations.filter(annotation => annotation.type === 'highlight').map(annotation => {
+        const originalAnchor = toInternalOriginalAnchor(annotation.originalAnchor)
+        return ({
+        ...originalAnchor,
+        id: annotation.id,
+        type: 'highlight' as const,
+        color: annotation.color,
+        comment: annotation.comment ?? null,
+        reviewer: reviewerById.get(annotation.reviewerId)!,
+        createdAt: annotation.createdAt,
+        originalAnchor,
+        tag: annotation.tag,
+      })}))
       setReviewers(data.reviewers)
       setReviewRound(restoredRound)
       setEditingDraftMarkdown(data.document.draftMarkdown)
@@ -178,7 +252,9 @@ function App() {
       setDocumentSelection(null)
       setDialogOpen(false)
       setHighlightDialogOpen(false)
+      setRedPenReviewDraft('')
       setRedPenDraft('')
+      setRedPenReplacementEnabled(true)
       setRedPenTagDraft(null)
       setHighlightCommentDraft('')
       setHighlightTagDraft(null)
@@ -196,7 +272,7 @@ function App() {
       setEditingAnnotationId(null)
       setDeleteTarget(null)
       lastWarnedEditingRef.current = ''
-      setNotice(`作業データを読み込みました。（Round ${data.workflow.roundNumber}・${phase}）`)
+      setNotice(`作業データを読み込みました。（Round ${data.round.number}・${phase}）`)
     } catch {
       setNotice('作業データを読み込めませんでした。JSONの内容を確認してください。')
     } finally {
@@ -227,6 +303,8 @@ function App() {
         corrections: annotations,
         highlights: highlightAnnotations,
       })
+      const validated = validateReviewExportData(data)
+      if (!validated.ok) throw new Error(validated.error)
       const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json;charset=utf-8' })
       objectUrl = URL.createObjectURL(blob)
       const anchor = document.createElement('a')
@@ -267,6 +345,8 @@ function App() {
         corrections: annotations,
         highlights: highlightAnnotations,
       })
+      const validated = validateReviewExportData(data)
+      if (!validated.ok) throw new Error(validated.error)
       const blob = new Blob([renderReviewHtml(data)], { type: 'text/html;charset=utf-8' })
       objectUrl = URL.createObjectURL(blob)
       const anchor = document.createElement('a')
@@ -403,7 +483,9 @@ function App() {
         multipleNodes: range.startContainer !== range.endContainer,
       },
     })
+    setRedPenReviewDraft('')
     setRedPenDraft(targetText)
+    setRedPenReplacementEnabled(true)
     setRedPenTagDraft(null)
     setHighlightCommentDraft('')
     setHighlightTagDraft(null)
@@ -421,7 +503,7 @@ function App() {
     browserSelection.removeAllRanges()
   }
 
-  const addAnnotation = (replacementText: string, tag: ReviewTag | null) => {
+  const addAnnotation = (reviewText: string | undefined, replacementText: string | undefined, tag: ReviewTag | null) => {
     if (!documentSelection || !canAddAnnotations) return
     const originalAnchor = {
       targetText: documentSelection.targetText,
@@ -442,6 +524,7 @@ function App() {
       type: 'red_pen',
       targetText: documentSelection.targetText,
       sourceText: documentSelection.sourceText,
+      reviewText,
       replacementText,
       contextBefore: documentSelection.contextBefore,
       contextAfter: documentSelection.contextAfter,
@@ -456,7 +539,7 @@ function App() {
       status: 'pending',
       anchorStatus: 'resolved',
       originalAnchor,
-      draftAnchor: { start: documentSelection.sourceStart, end: documentSelection.sourceEnd, method: 'offset', confidence: 1 },
+      draftAnchor: { start: documentSelection.sourceStart, end: documentSelection.sourceEnd, text: documentSelection.sourceText, method: 'offset', confidence: 1 },
       reviewer: { id: currentReviewer.id, name: currentReviewer.name },
       createdAt: new Date().toISOString(),
       tag,
@@ -465,7 +548,7 @@ function App() {
     setActiveAnnotationId(annotation.id)
     setDialogOpen(false)
     setDocumentSelection(null)
-    setNotice(`赤ペン修正「${annotation.targetText} → ${annotation.replacementText}」を登録しました。`)
+    setNotice(replacementText !== undefined ? `赤ペン修正「${annotation.targetText}」と置換案を登録しました。` : `赤ペンレビュー「${annotation.targetText}」を登録しました。`)
   }
 
   const addHighlightAnnotation = (comment: string, tag: ReviewTag | null, color: HighlightColor) => {
@@ -506,14 +589,16 @@ function App() {
 
   const switchSelectionTool = (nextTool: 'redPen' | 'highlighter') => {
     if (!canAddAnnotations) return
-    const redPenHasInput = dialogOpen && (redPenDraft !== documentSelection?.targetText || redPenTagDraft !== null)
+    const redPenHasInput = dialogOpen && (redPenReviewDraft.trim() !== '' || redPenDraft !== documentSelection?.targetText || !redPenReplacementEnabled || redPenTagDraft !== null)
     const highlightHasInput = highlightDialogOpen && (highlightCommentDraft.trim() !== '' || highlightTagDraft !== null)
     if ((redPenHasInput || highlightHasInput) && !window.confirm('入力済みの内容は引き継がれません。ペンを持ち替えますか？')) return
 
     setActiveTool(nextTool)
     setDialogOpen(nextTool === 'redPen' && Boolean(documentSelection))
     setHighlightDialogOpen(nextTool === 'highlighter' && Boolean(documentSelection))
+    setRedPenReviewDraft('')
     setRedPenDraft(documentSelection?.targetText ?? '')
+    setRedPenReplacementEnabled(true)
     setRedPenTagDraft(null)
     setHighlightCommentDraft('')
     setHighlightTagDraft(null)
@@ -575,26 +660,7 @@ function App() {
   }
 
   const commitDraftEditing = () => {
-    if (editingAnnotationId && editingDraftMarkdown !== draftMarkdown) {
-      setAnnotations(current => current.map(annotation => {
-        if (annotation.id !== editingAnnotationId || annotation.anchorStatus !== 'resolved' || !annotation.draftAnchor) return annotation
-        const before = draftMarkdown
-        const after = editingDraftMarkdown
-        let prefix = 0
-        while (prefix < before.length && prefix < after.length && before[prefix] === after[prefix]) prefix += 1
-        let suffix = 0
-        while (suffix < before.length - prefix && suffix < after.length - prefix && before[before.length - 1 - suffix] === after[after.length - 1 - suffix]) suffix += 1
-        const oldChangeEnd = before.length - suffix
-        if (oldChangeEnd < annotation.draftAnchor.start || prefix > annotation.draftAnchor.end) return annotation
-        const start = Math.min(annotation.draftAnchor.start, prefix)
-        const end = Math.max(start, annotation.draftAnchor.end + (after.length - before.length))
-        return {
-          ...annotation,
-          draftAnchorText: after.slice(start, end),
-          draftAnchor: { start, end, method: 'offset', confidence: 1 },
-        }
-      }))
-    }
+    if (editingDraftMarkdown !== draftMarkdown) setAnnotations(current => updateResolvedDraftAnchors(draftMarkdown, editingDraftMarkdown, current))
     setDraftMarkdown(editingDraftMarkdown)
     setStructureDialogOpen(false)
     setStructureChanges([])
@@ -608,9 +674,8 @@ function App() {
         return {
           ...annotation,
           proposalApplied: true,
-          draftAnchorText: annotation.replacementText,
           anchorStatus: 'resolved',
-          draftAnchor: { start, end: start + annotation.replacementText.length, method: 'offset', confidence: 1 },
+          draftAnchor: { start, end: start + (annotation.replacementText?.length ?? 0), text: annotation.replacementText ?? '', method: 'offset', confidence: 1 },
         }
       }))
       setPendingProposalId(null)
@@ -659,6 +724,7 @@ function App() {
       setStructureDialogOpen(true)
       return
     }
+    setAnnotations(current => updateResolvedDraftAnchors(draftMarkdown, editingDraftMarkdown, current))
     setDraftMarkdown(editingDraftMarkdown)
     setDraftEditing(false)
   }
@@ -669,7 +735,10 @@ function App() {
     if (polishingTimerRef.current !== null) window.clearTimeout(polishingTimerRef.current)
     polishingTimerRef.current = window.setTimeout(() => {
       const changes = detectMarkdownStructureChanges(draftMarkdown, editingDraftMarkdown)
-      if (!changes.length) setDraftMarkdown(editingDraftMarkdown)
+      if (!changes.length) {
+        setAnnotations(current => updateResolvedDraftAnchors(draftMarkdown, editingDraftMarkdown, current))
+        setDraftMarkdown(editingDraftMarkdown)
+      }
       else {
         lastWarnedEditingRef.current = editingDraftMarkdown
         setStructureChanges(changes)
@@ -717,7 +786,7 @@ function App() {
       return
     }
     if (!annotation) return
-    if (annotation.anchorStatus === 'resolved' && !draftEditing) {
+    if (annotation.draftAnchor && !draftEditing) {
       pulseAnnotation(annotationId, 'draft')
     } else {
       pulseAnnotation(annotationId, 'original')
@@ -726,12 +795,15 @@ function App() {
 
   const completeAnnotation = (annotationId: string, changed: boolean) => {
     if (reviewRound.phase !== 'revising') return
+    const target = annotations.find(annotation => annotation.id === annotationId)
+    if (!target?.draftAnchor) {
+      setNotice('修正文書内の対応位置が未解決のため、この校正指示は完了できません。')
+      return
+    }
     setAnnotations(current => current.map(annotation => annotation.id === annotationId ? {
       ...annotation,
       status: changed ? 'completed_changed' : 'completed_unchanged',
-      completedText: annotation.draftAnchor && annotation.anchorStatus === 'resolved'
-        ? draftMarkdown.slice(annotation.draftAnchor.start, annotation.draftAnchor.end)
-        : annotation.completedText,
+      resultText: draftMarkdown.slice(annotation.draftAnchor!.start, annotation.draftAnchor!.end),
     } : annotation))
     setNotice(changed ? '校正指示を「修正完了」にしました。' : '校正指示を「変更せず完了」にしました。')
   }
@@ -739,8 +811,8 @@ function App() {
   const applyAnnotationProposal = (annotationId: string) => {
     if (reviewRound.phase !== 'revising') return
     const annotation = annotations.find(item => item.id === annotationId)
-    if (!annotation || annotation.status !== 'pending' || annotation.proposalApplied) return
-    if (annotation.anchorStatus !== 'resolved' || !annotation.draftAnchor) {
+    if (!annotation || annotation.status !== 'pending' || annotation.proposalApplied || annotation.replacementText === undefined) return
+    if (!annotation.draftAnchor) {
       setNotice('修正文書内の対応位置を特定できないため、修正案を自動適用できません。')
       return
     }
@@ -760,12 +832,11 @@ function App() {
       return
     }
     setDraftMarkdown(nextMarkdown)
-    setAnnotations(current => current.map(item => item.id === annotationId ? {
+    setAnnotations(current => updateResolvedDraftAnchors(draftMarkdown, nextMarkdown, current).map(item => item.id === annotationId ? {
       ...item,
       proposalApplied: true,
-      draftAnchorText: item.replacementText,
       anchorStatus: 'resolved',
-      draftAnchor: { start, end: start + item.replacementText.length, method: 'offset', confidence: 1 },
+      draftAnchor: { start, end: start + (item.replacementText?.length ?? 0), text: item.replacementText ?? '', method: 'offset', confidence: 1 },
     } : item))
     setPendingProposalId(null)
     setNotice('修正案を本文へ適用しました。内容を確認・加筆してから「修正完了」を押してください。')
@@ -780,7 +851,7 @@ function App() {
     setDraftEditing(true)
     setEditingAnnotationId(annotationId)
     const anchor = annotation.draftAnchor
-    if (annotation.anchorStatus === 'resolved' && anchor) {
+    if (anchor) {
       setEditSelection({ start: anchor.start, end: anchor.end, requestId: Date.now() })
       setNotice('対象箇所を選択しました。本文を修正・加筆し、「変更を反映」を押してください。')
     } else {
@@ -795,6 +866,7 @@ function App() {
       ...annotation,
       status: 'pending',
       proposalApplied: false,
+      resultText: undefined,
     } : annotation))
     setActiveAnnotationId(annotationId)
     setNotice('完了済みの校正指示を再修正として開きました。現在の本文は変更していません。')
@@ -905,10 +977,10 @@ function App() {
   return (
     <div className="app-shell">
       <input ref={fileInputRef} className="visually-hidden" type="file" accept=".md,text/markdown,text/plain" onChange={loadMarkdown} />
-      <input ref={workDataInputRef} className="visually-hidden" type="file" accept=".json,application/json" onChange={loadWorkData} />
+      <input ref={workDataInputRef} className="visually-hidden" type="file" accept=".json,.html,application/json,text/html" onChange={loadWorkData} />
       <div className="sticky-header-stack">
         <Header onOpenFile={() => fileInputRef.current?.click()} onPasteMarkdown={() => setPasteDialogOpen(true)} onOpenWorkData={() => workDataInputRef.current?.click()} onExportWorkData={exportWorkData} canExportWorkData={Boolean(originalMarkdown)} onExportMarkdown={requestPolishingCompletion} canExportMarkdown={reviewRound.phase === 'polishing' && !structureDialogOpen} onExportReviewHtml={exportReviewHtml} canExportReviewHtml={Boolean(originalMarkdown)} onSwap={() => paneLayout === 'sideBySide' && setSwapped(value => !value)} onToggleSidebar={() => setSidebarOpen(value => !value)} activeTool={activeTool} onToolChange={changeActiveTool} paneLayout={paneLayout} onPaneLayoutChange={setPaneLayout} sidebarOpen={showSidebar} canSelectTools={canAddAnnotations} annotationCount={annotations.length} pendingCount={pendingAnnotations.length} onPreviousPending={() => movePending(-1)} onNextPending={() => movePending(1)} phase={reviewRound.phase} reviewerCompletedCount={reviewers.filter(reviewer => reviewer.status === 'completed').length} reviewerCount={reviewers.length} onCompleteReview={completeCurrentReview} canStartPolishing={reviewRound.phase === 'revising' && pendingAnnotations.length === 0} onStartPolishing={() => setPolishingDialogOpen(true)} />
-        {notice && <div className={`selection-notice ${documentSelection ? 'ready' : ''}`} role="status"><span>{notice}</span><button className="notice-close" type="button" onClick={clearDocumentSelection} aria-label="選択または通知を閉じる">×</button></div>}
+        {notice && <div className={`selection-notice ${documentSelection ? 'ready' : ''} ${notice === REVIEW_HTML_FORMAT_ERROR ? 'floating-format-error' : ''}`} role={notice === REVIEW_HTML_FORMAT_ERROR ? 'alert' : 'status'}><span>{notice}</span><button className="notice-close" type="button" onClick={clearDocumentSelection} aria-label="選択または通知を閉じる">×</button></div>}
       </div>
       {paneLayout === 'sideBySide' && <div className="mobile-tabs" role="tablist" aria-label="表示する文書">
         <button type="button" role="tab" aria-selected={mobilePane === 'original'} onClick={() => setMobilePane('original')}>原本</button>
@@ -920,7 +992,7 @@ function App() {
         </div>
         {showSidebar && <Sidebar annotations={annotations} highlights={highlightAnnotations} activeAnnotationId={activeAnnotationId} onClose={() => setSidebarOpen(false)} onSelectAnnotation={selectAnnotation} onComplete={completeAnnotation} onApplyProposal={applyAnnotationProposal} onEdit={editAnnotation} onReopen={reopenAnnotation} onDeleteRequest={requestAnnotationDelete} phase={reviewRound.phase} />}
       </main>
-      {dialogOpen && documentSelection && <RedPenDialog selection={documentSelection} replacementText={redPenDraft} tag={redPenTagDraft} onReplacementTextChange={setRedPenDraft} onTagChange={setRedPenTagDraft} onSwitchTool={() => switchSelectionTool('highlighter')} onCancel={clearDocumentSelection} onSubmit={addAnnotation} />}
+      {dialogOpen && documentSelection && <RedPenDialog selection={documentSelection} reviewText={redPenReviewDraft} replacementText={redPenDraft} replacementEnabled={redPenReplacementEnabled} tag={redPenTagDraft} onReviewTextChange={setRedPenReviewDraft} onReplacementTextChange={setRedPenDraft} onReplacementEnabledChange={setRedPenReplacementEnabled} onTagChange={setRedPenTagDraft} onSwitchTool={() => switchSelectionTool('highlighter')} onCancel={clearDocumentSelection} onSubmit={addAnnotation} />}
       {highlightDialogOpen && documentSelection && <HighlightDialog selection={documentSelection} comment={highlightCommentDraft} color={highlightColor} tag={highlightTagDraft} onCommentChange={setHighlightCommentDraft} onColorChange={setHighlightColor} onTagChange={setHighlightTagDraft} onSwitchTool={() => switchSelectionTool('redPen')} onCancel={clearDocumentSelection} onSubmit={addHighlightAnnotation} />}
       {pasteDialogOpen && <PasteMarkdownDialog onCancel={() => setPasteDialogOpen(false)} onStart={markdown => startReview(markdown, 'pasted_markdown.md')} />}
       {lockDialogOpen && <ReviewLockDialog onCancel={() => setLockDialogOpen(false)} onConfirm={confirmReviewLock} />}

@@ -1,7 +1,7 @@
 import { renderToStaticMarkup } from 'react-dom/server'
 import { MarkdownViewer } from '../components/MarkdownViewer'
-import type { RedPenAnnotation } from '../types/annotation'
-import type { ReviewExportDataV1 } from '../types/portableReview'
+import type { HighlightAnnotation, RedPenAnnotation } from '../types/annotation'
+import type { ExportRedPenAnnotation, ReviewExportDataV2 } from '../types/portableReview'
 
 const tagLabels: Record<string, string> = { question: '疑問', rewrite: '修正', delete: '削除', add: '追記', fact_check: '確認', note: 'メモ' }
 
@@ -12,12 +12,12 @@ const escapeHtml = (value: string) => value
   .replace(/"/g, '&quot;')
   .replace(/'/g, '&#39;')
 
-const safeEmbeddedJson = (data: ReviewExportDataV1) => JSON.stringify(data, null, 2)
+const safeEmbeddedJson = (data: ReviewExportDataV2) => JSON.stringify(data, null, 2)
   .replace(/</g, '\\u003c')
   .replace(/\u2028/g, '\\u2028')
   .replace(/\u2029/g, '\\u2029')
 
-const statusLabel = (status: ReviewExportDataV1['corrections'][number]['status']) => {
+const statusLabel = (status: ExportRedPenAnnotation['status']) => {
   if (status === 'completed_changed') return '修正済み'
   if (status === 'completed_unchanged') return '変更せず完了'
   return '未完了'
@@ -25,42 +25,47 @@ const statusLabel = (status: ReviewExportDataV1['corrections'][number]['status']
 
 const highlightColorLabel = (color: string) => color === 'green' ? '緑' : color === 'yellow' ? '黄色' : color
 
-function renderSidebar(data: ReviewExportDataV1) {
-  const corrections = data.corrections.map(annotation => `
+function renderSidebar(data: ReviewExportDataV2) {
+  const reviewerNames = new Map(data.reviewers.map(reviewer => [reviewer.id, reviewer.name]))
+  const correctionData = data.annotations.filter(annotation => annotation.type === 'red_pen')
+  const highlightData = data.annotations.filter(annotation => annotation.type === 'highlight')
+  const corrections = correctionData.map(annotation => `
     <button class="review-list-item correction-item" type="button" data-sidebar-review-id="${escapeHtml(annotation.id)}">
       <span class="item-kind">赤ペン・${escapeHtml(statusLabel(annotation.status))}</span>
-      <span><b>対象：</b>${escapeHtml(annotation.targetText)}</span>
-      <span><b>レビュー：</b>${escapeHtml(annotation.reviewText)}</span>
+      <span><b>対象：</b>${escapeHtml(annotation.originalAnchor.targetText)}</span>
+      ${annotation.reviewText !== undefined ? `<span><b>レビュー：</b>${escapeHtml(annotation.reviewText)}</span>` : ''}
+      ${annotation.replacementText !== undefined ? `<span><b>置換案：</b>${escapeHtml(annotation.replacementText || '（削除）')}</span>` : ''}
       ${annotation.tag ? `<span><b>タグ：</b>${escapeHtml(tagLabels[annotation.tag] ?? annotation.tag)}</span>` : ''}
-      ${annotation.reviewer ? `<span><b>校正者：</b>${escapeHtml(annotation.reviewer.name)}</span>` : ''}
+      <span><b>校正者：</b>${escapeHtml(reviewerNames.get(annotation.reviewerId) ?? '未設定')}</span>
     </button>`).join('')
-  const highlights = data.highlights.map(annotation => `
+  const highlights = highlightData.map(annotation => `
     <button class="review-list-item highlight-item" type="button" data-sidebar-review-id="${escapeHtml(annotation.id)}">
       <span class="item-kind">蛍光・${escapeHtml(highlightColorLabel(annotation.color))}</span>
-      <span><b>対象：</b>${escapeHtml(annotation.targetText)}</span>
+      <span><b>対象：</b>${escapeHtml(annotation.originalAnchor.targetText)}</span>
       ${annotation.comment ? `<span><b>コメント：</b>${escapeHtml(annotation.comment)}</span>` : '<span><b>コメント：</b>なし</span>'}
       ${annotation.tag ? `<span><b>タグ：</b>${escapeHtml(tagLabels[annotation.tag] ?? annotation.tag)}</span>` : ''}
-      <span><b>校正者：</b>${escapeHtml(annotation.reviewer.name)}</span>
+      <span><b>校正者：</b>${escapeHtml(reviewerNames.get(annotation.reviewerId) ?? '未設定')}</span>
     </button>`).join('')
   return `
     <aside class="review-sidebar" aria-label="校正一覧">
-      <section><h2>赤ペン <span>${data.corrections.length}件</span></h2>${corrections || '<p class="empty-list">赤ペン校正はありません。</p>'}</section>
-      <section><h2>蛍光 <span>${data.highlights.length}件</span></h2>${highlights || '<p class="empty-list">蛍光校正はありません。</p>'}</section>
+      <section><h2>赤ペン <span>${correctionData.length}件</span></h2>${corrections || '<p class="empty-list">赤ペン校正はありません。</p>'}</section>
+      <section><h2>蛍光 <span>${highlightData.length}件</span></h2>${highlights || '<p class="empty-list">蛍光校正はありません。</p>'}</section>
     </aside>`
 }
 
-export function renderReviewHtml(data: ReviewExportDataV1) {
-  const corrections = data.corrections.map(({ reviewText, ...annotation }) => ({
-    ...annotation,
-    replacementText: reviewText,
-    reviewer: annotation.reviewer ?? undefined,
-    createdAt: annotation.createdAt ?? undefined,
+export function renderReviewHtml(data: ReviewExportDataV2) {
+  const reviewerById = new Map(data.reviewers.map(reviewer => [reviewer.id, reviewer]))
+  const corrections = data.annotations.filter(annotation => annotation.type === 'red_pen').map(annotation => ({
+    ...annotation.originalAnchor, ...annotation, anchorStatus: annotation.draftAnchor ? 'resolved' : 'unresolved', reviewer: reviewerById.get(annotation.reviewerId),
   })) as RedPenAnnotation[]
+  const highlights = data.annotations.filter(annotation => annotation.type === 'highlight').map(annotation => ({
+    ...annotation.originalAnchor, ...annotation, comment: annotation.comment ?? null, reviewer: reviewerById.get(annotation.reviewerId)!,
+  })) as HighlightAnnotation[]
   const documentHtml = renderToStaticMarkup(
     <MarkdownViewer
       markdown={data.document.originalMarkdown}
       annotations={corrections}
-      highlights={data.highlights}
+      highlights={highlights}
       activeAnnotationId={null}
       mode="original"
     />,
@@ -68,11 +73,14 @@ export function renderReviewHtml(data: ReviewExportDataV1) {
   const reviewerNames = data.reviewers.map(reviewer => reviewer.name).join('、') || '未設定'
   const embeddedJson = safeEmbeddedJson(data)
   const title = `${data.document.sourceFileName || '文書'} - ${data.generator.name} 校正結果`
+  const correctionCount = corrections.length
+  const highlightCount = highlights.length
 
   return `<!doctype html>
 <html lang="ja">
 <head>
   <meta charset="utf-8">
+  <meta name="metami-proof-format" content="review">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>${escapeHtml(title)}</title>
   <style>
@@ -100,14 +108,14 @@ export function renderReviewHtml(data: ReviewExportDataV1) {
 <body>
   <header class="result-header">
     <h1>${escapeHtml(data.generator.name)} 校正結果</h1>
-    <p class="result-meta"><span>${escapeHtml(data.generator.name)} ${escapeHtml(data.generator.version)}</span><span>元ファイル：${escapeHtml(data.document.sourceFileName || '未設定')}</span><span>Round ${data.workflow.roundNumber}</span><span>工程：${escapeHtml(data.workflow.phase)}</span><span>校正者：${escapeHtml(reviewerNames)}</span><span>赤ペン：${data.corrections.length}件</span><span>蛍光：${data.highlights.length}件</span></p>
+    <p class="result-meta"><span>${escapeHtml(data.generator.name)} ${escapeHtml(data.generator.version)}</span><span>元ファイル：${escapeHtml(data.document.sourceFileName || '未設定')}</span><span>Round ${data.round.number}</span><span>工程：${escapeHtml(data.round.phase)}</span><span>校正者：${escapeHtml(reviewerNames)}</span><span>赤ペン：${correctionCount}件</span><span>蛍光：${highlightCount}件</span></p>
   </header>
   <main class="review-layout">
     <article class="review-document" aria-label="原文と校正結果">${documentHtml}</article>
     ${renderSidebar(data)}
   </main>
   <div id="metami-comment-popover" class="comment-popover screen-only" role="dialog" aria-label="蛍光コメント" hidden><p></p><small></small></div>
-  <footer class="result-footer">このファイルには、人間向け校正表示と機械向けReviewExportDataV1が含まれています。</footer>
+  <footer class="result-footer">このファイルには、人間向け校正表示と機械向けReviewExportData 2.0 Nightly revision 1が含まれています。</footer>
   <script type="application/json" id="metami-proof-review-data">${embeddedJson}</script>
   <script>
     (()=>{

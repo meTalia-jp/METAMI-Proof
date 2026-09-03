@@ -1,0 +1,39 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:metami-proof:review-export-data:2.0:nightly:1",
+  "title": "METAMI Proof ReviewExportData 2.0 Nightly revision 1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "schemaStatus", "schemaRevision", "generator", "exportedAt", "aiHandlingPolicy", "reviewSemantics", "tagSemantics", "document", "round", "reviewers", "annotations"],
+  "properties": {
+    "schemaVersion": { "const": "2.0" },
+    "schemaStatus": { "const": "nightly" },
+    "schemaRevision": { "const": 1 },
+    "generator": { "$ref": "#/$defs/generator" },
+    "exportedAt": { "type": "string", "format": "date-time" },
+    "aiHandlingPolicy": { "$ref": "#/$defs/aiHandlingPolicy" },
+    "reviewSemantics": { "$ref": "#/$defs/reviewSemantics" },
+    "tagSemantics": { "$ref": "#/$defs/tagSemantics" },
+    "document": { "$ref": "#/$defs/document" },
+    "round": { "$ref": "#/$defs/round" },
+    "reviewers": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/reviewer" } },
+    "annotations": { "type": "array", "items": { "oneOf": [{ "$ref": "#/$defs/redPen" }, { "$ref": "#/$defs/highlight" }] } },
+    "extensions": { "type": "object" }
+  },
+  "$defs": {
+    "generator": { "type": "object", "additionalProperties": false, "required": ["name", "version"], "properties": { "name": { "type": "string", "minLength": 1 }, "version": { "type": "string", "minLength": 1 } } },
+    "aiHandlingPolicy": { "type": "object", "additionalProperties": false, "required": ["purpose", "toolUse", "reviewRule"], "properties": { "purpose": { "type": "string" }, "toolUse": { "type": "string" }, "reviewRule": { "type": "string" } } },
+    "reviewSemantics": { "type": "object", "additionalProperties": false, "required": ["red_pen", "highlight", "tag"], "properties": { "red_pen": { "type": "string" }, "highlight": { "type": "string" }, "tag": { "type": "string" } } },
+    "tagSemantics": { "type": "object", "additionalProperties": false, "required": ["question", "rewrite", "delete", "add", "fact_check", "note"], "properties": { "question": { "type": "string" }, "rewrite": { "type": "string" }, "delete": { "type": "string" }, "add": { "type": "string" }, "fact_check": { "type": "string" }, "note": { "type": "string" } } },
+    "document": { "type": "object", "additionalProperties": false, "required": ["originalMarkdown", "draftMarkdown"], "properties": { "sourceFileName": { "type": "string" }, "originalMarkdown": { "type": "string" }, "draftMarkdown": { "type": "string" } } },
+    "round": { "type": "object", "additionalProperties": false, "required": ["id", "number", "phase"], "properties": { "id": { "type": "string", "minLength": 1 }, "number": { "type": "integer", "minimum": 1 }, "phase": { "enum": ["reviewing", "locked", "revising", "polishing", "completed"] }, "lockedAt": { "type": "string", "format": "date-time" } } },
+    "reviewer": { "type": "object", "additionalProperties": false, "required": ["id", "name", "status"], "properties": { "id": { "type": "string", "minLength": 1 }, "name": { "type": "string" }, "status": { "enum": ["working", "completed"] } } },
+    "tag": { "enum": ["question", "rewrite", "delete", "add", "fact_check", "note"] },
+    "block": { "type": "object", "additionalProperties": false, "minProperties": 1, "properties": { "id": { "type": "string" }, "type": { "type": "string" }, "text": { "type": "string" } } },
+    "originalAnchor": { "type": "object", "additionalProperties": false, "required": ["sourceStart", "sourceEnd", "sourceText", "targetText", "contextBefore", "contextAfter"], "properties": { "sourceStart": { "type": "integer", "minimum": 0 }, "sourceEnd": { "type": "integer", "minimum": 1 }, "sourceText": { "type": "string", "minLength": 1 }, "targetText": { "type": "string", "minLength": 1 }, "contextBefore": { "type": "string" }, "contextAfter": { "type": "string" }, "block": { "$ref": "#/$defs/block" } } },
+    "draftAnchor": { "type": "object", "additionalProperties": false, "required": ["start", "end", "text", "method"], "properties": { "start": { "type": "integer", "minimum": 0 }, "end": { "type": "integer", "minimum": 0 }, "text": { "type": "string" }, "method": { "enum": ["offset", "context", "block"] }, "confidence": { "type": "number", "minimum": 0, "maximum": 1 } } },
+    "base": { "type": "object", "required": ["id", "type", "reviewerId", "createdAt", "originalAnchor"], "properties": { "id": { "type": "string", "minLength": 1 }, "type": { "type": "string" }, "reviewerId": { "type": "string", "minLength": 1 }, "createdAt": { "type": "string", "format": "date-time" }, "originalAnchor": { "$ref": "#/$defs/originalAnchor" }, "tag": { "$ref": "#/$defs/tag" } } },
+    "redPen": { "allOf": [{ "$ref": "#/$defs/base" }, { "type": "object", "additionalProperties": false, "required": ["id", "type", "reviewerId", "createdAt", "originalAnchor", "status", "draftAnchor"], "properties": { "id": { "type": "string", "minLength": 1 }, "type": { "const": "red_pen" }, "reviewerId": { "type": "string", "minLength": 1 }, "createdAt": { "type": "string", "format": "date-time" }, "originalAnchor": { "$ref": "#/$defs/originalAnchor" }, "tag": { "$ref": "#/$defs/tag" }, "reviewText": { "type": "string", "minLength": 1 }, "replacementText": { "type": "string" }, "status": { "enum": ["pending", "completed_changed", "completed_unchanged"] }, "resultText": { "type": "string" }, "draftAnchor": { "oneOf": [{ "$ref": "#/$defs/draftAnchor" }, { "type": "null" }] } }, "anyOf": [{ "required": ["reviewText"] }, { "required": ["replacementText"] }], "allOf": [{ "if": { "properties": { "status": { "const": "pending" } } }, "then": { "not": { "required": ["resultText"] } }, "else": { "required": ["resultText"], "properties": { "draftAnchor": { "$ref": "#/$defs/draftAnchor" } } } }] }] },
+    "highlight": { "allOf": [{ "$ref": "#/$defs/base" }, { "type": "object", "additionalProperties": false, "required": ["id", "type", "reviewerId", "createdAt", "originalAnchor", "color"], "properties": { "id": { "type": "string", "minLength": 1 }, "type": { "const": "highlight" }, "reviewerId": { "type": "string", "minLength": 1 }, "createdAt": { "type": "string", "format": "date-time" }, "originalAnchor": { "$ref": "#/$defs/originalAnchor" }, "tag": { "$ref": "#/$defs/tag" }, "color": { "enum": ["yellow", "green"] }, "comment": { "type": "string" } } }] }
+  }
+}
