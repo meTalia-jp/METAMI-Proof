@@ -10,6 +10,7 @@ import { PolishingConfirmDialog } from './components/PolishingConfirmDialog'
 import { MarkdownExportDialog } from './components/MarkdownExportDialog'
 import { AnnotationDeleteDialog } from './components/AnnotationDeleteDialog'
 import { PasteMarkdownDialog } from './components/PasteMarkdownDialog'
+import { SettingsDialog } from './components/SettingsDialog'
 import type { DocumentSelection, HighlightAnnotation, HighlightColor, RedPenAnnotation, ReviewTag } from './types/annotation'
 import type { ExportOriginalAnchor } from './types/portableReview'
 import { areAllReviewersCompleted, type Reviewer, type ReviewRound } from './types/review'
@@ -95,6 +96,7 @@ function App() {
   const [editingAnnotationId, setEditingAnnotationId] = useState<string | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<{ kind: 'red_pen' | 'highlight'; id: string } | null>(null)
   const [pasteDialogOpen, setPasteDialogOpen] = useState(false)
+  const [settingsDialogOpen, setSettingsDialogOpen] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const workDataInputRef = useRef<HTMLInputElement>(null)
   const reanchorTimerRef = useRef<number | null>(null)
@@ -979,7 +981,7 @@ function App() {
       <input ref={fileInputRef} className="visually-hidden" type="file" accept=".md,text/markdown,text/plain" onChange={loadMarkdown} />
       <input ref={workDataInputRef} className="visually-hidden" type="file" accept=".json,.html,application/json,text/html" onChange={loadWorkData} />
       <div className="sticky-header-stack">
-        <Header onOpenFile={() => fileInputRef.current?.click()} onPasteMarkdown={() => setPasteDialogOpen(true)} onOpenWorkData={() => workDataInputRef.current?.click()} onExportWorkData={exportWorkData} canExportWorkData={Boolean(originalMarkdown)} onExportMarkdown={requestPolishingCompletion} canExportMarkdown={reviewRound.phase === 'polishing' && !structureDialogOpen} onExportReviewHtml={exportReviewHtml} canExportReviewHtml={Boolean(originalMarkdown)} onSwap={() => paneLayout === 'sideBySide' && setSwapped(value => !value)} onToggleSidebar={() => setSidebarOpen(value => !value)} activeTool={activeTool} onToolChange={changeActiveTool} paneLayout={paneLayout} onPaneLayoutChange={setPaneLayout} sidebarOpen={showSidebar} canSelectTools={canAddAnnotations} annotationCount={annotations.length} pendingCount={pendingAnnotations.length} onPreviousPending={() => movePending(-1)} onNextPending={() => movePending(1)} phase={reviewRound.phase} reviewerCompletedCount={reviewers.filter(reviewer => reviewer.status === 'completed').length} reviewerCount={reviewers.length} onCompleteReview={completeCurrentReview} canStartPolishing={reviewRound.phase === 'revising' && pendingAnnotations.length === 0} onStartPolishing={() => setPolishingDialogOpen(true)} />
+        <Header onOpenFile={() => fileInputRef.current?.click()} onPasteMarkdown={() => setPasteDialogOpen(true)} onOpenWorkData={() => workDataInputRef.current?.click()} onExportWorkData={exportWorkData} canExportWorkData={Boolean(originalMarkdown)} onExportMarkdown={requestPolishingCompletion} canExportMarkdown={reviewRound.phase === 'polishing' && !structureDialogOpen} onExportReviewHtml={exportReviewHtml} canExportReviewHtml={Boolean(originalMarkdown)} onSwap={() => paneLayout === 'sideBySide' && setSwapped(value => !value)} onToggleSidebar={() => setSidebarOpen(value => !value)} activeTool={activeTool} onToolChange={changeActiveTool} paneLayout={paneLayout} onPaneLayoutChange={setPaneLayout} sidebarOpen={showSidebar} canSelectTools={canAddAnnotations} annotationCount={annotations.length} pendingCount={pendingAnnotations.length} onPreviousPending={() => movePending(-1)} onNextPending={() => movePending(1)} phase={reviewRound.phase} reviewerCompletedCount={reviewers.filter(reviewer => reviewer.status === 'completed').length} reviewerCount={reviewers.length} onCompleteReview={completeCurrentReview} canStartPolishing={reviewRound.phase === 'revising' && pendingAnnotations.length === 0} onStartPolishing={() => setPolishingDialogOpen(true)} onOpenSettings={() => setSettingsDialogOpen(true)} />
         {notice && <div className={`selection-notice ${documentSelection ? 'ready' : ''} ${notice === REVIEW_HTML_FORMAT_ERROR ? 'floating-format-error' : ''}`} role={notice === REVIEW_HTML_FORMAT_ERROR ? 'alert' : 'status'}><span>{notice}</span><button className="notice-close" type="button" onClick={clearDocumentSelection} aria-label="選択または通知を閉じる">×</button></div>}
       </div>
       {paneLayout === 'sideBySide' && <div className="mobile-tabs" role="tablist" aria-label="表示する文書">
@@ -995,6 +997,7 @@ function App() {
       {dialogOpen && documentSelection && <RedPenDialog selection={documentSelection} reviewText={redPenReviewDraft} replacementText={redPenDraft} replacementEnabled={redPenReplacementEnabled} tag={redPenTagDraft} onReviewTextChange={setRedPenReviewDraft} onReplacementTextChange={setRedPenDraft} onReplacementEnabledChange={setRedPenReplacementEnabled} onTagChange={setRedPenTagDraft} onSwitchTool={() => switchSelectionTool('highlighter')} onCancel={clearDocumentSelection} onSubmit={addAnnotation} />}
       {highlightDialogOpen && documentSelection && <HighlightDialog selection={documentSelection} comment={highlightCommentDraft} color={highlightColor} tag={highlightTagDraft} onCommentChange={setHighlightCommentDraft} onColorChange={setHighlightColor} onTagChange={setHighlightTagDraft} onSwitchTool={() => switchSelectionTool('redPen')} onCancel={clearDocumentSelection} onSubmit={addHighlightAnnotation} />}
       {pasteDialogOpen && <PasteMarkdownDialog onCancel={() => setPasteDialogOpen(false)} onStart={markdown => startReview(markdown, 'pasted_markdown.md')} />}
+      {settingsDialogOpen && <SettingsDialog onClose={() => setSettingsDialogOpen(false)} />}
       {lockDialogOpen && <ReviewLockDialog onCancel={() => setLockDialogOpen(false)} onConfirm={confirmReviewLock} />}
       {structureDialogOpen && <MarkdownStructureDialog changes={structureChanges} onBack={returnToStructureEditing} onApply={commitDraftEditing} applyLabel={isPolishing ? 'このまま変更' : 'このまま反映'} />}
       {polishingDialogOpen && <PolishingConfirmDialog onCancel={() => setPolishingDialogOpen(false)} onConfirm={enterPolishing} />}

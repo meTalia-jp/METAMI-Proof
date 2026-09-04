@@ -21,6 +21,7 @@ type HeaderProps = {
   onPreviousPending: () => void; onNextPending: () => void; phase: ReviewPhase
   reviewerCompletedCount: number; reviewerCount: number; onCompleteReview: () => void
   canStartPolishing: boolean; onStartPolishing: () => void
+  onOpenSettings: () => void
 }
 
 const tools: { id: ActiveTool; tone: string; labelKey: TranslationKey }[] = [
@@ -32,7 +33,7 @@ const layouts: { id: PaneLayout; labelKey: TranslationKey }[] = [
 ]
 
 export function Header(props: HeaderProps) {
-  const { onOpenFile, onPasteMarkdown, onOpenWorkData, onExportWorkData, canExportWorkData, onExportMarkdown, canExportMarkdown, onExportReviewHtml, canExportReviewHtml, onSwap, onToggleSidebar, activeTool, onToolChange, paneLayout, onPaneLayoutChange, sidebarOpen, canSelectTools, annotationCount, pendingCount, onPreviousPending, onNextPending, phase, reviewerCompletedCount, reviewerCount, onCompleteReview, canStartPolishing, onStartPolishing } = props
+  const { onOpenFile, onPasteMarkdown, onOpenWorkData, onExportWorkData, canExportWorkData, onExportMarkdown, canExportMarkdown, onExportReviewHtml, canExportReviewHtml, onSwap, onToggleSidebar, activeTool, onToolChange, paneLayout, onPaneLayoutChange, sidebarOpen, canSelectTools, annotationCount, pendingCount, onPreviousPending, onNextPending, phase, reviewerCompletedCount, reviewerCount, onCompleteReview, canStartPolishing, onStartPolishing, onOpenSettings } = props
   const [openMenu, setOpenMenu] = useState<MenuName | null>(null)
   const { t } = useTranslation()
   const menusRef = useRef<HTMLDivElement>(null)
@@ -61,6 +62,7 @@ export function Header(props: HeaderProps) {
         {renderMenu('document', t('menu.document'), [{ label: t('menu.document.open'), action: onOpenFile }, { label: t('menu.document.paste'), action: onPasteMarkdown }])}
         {renderMenu('workData', t('menu.workData'), [{ label: t('menu.workData.open'), action: onOpenWorkData }, { label: t('menu.workData.save'), action: onExportWorkData, disabled: !canExportWorkData }])}
         {renderMenu('output', t('menu.output'), [{ label: t('menu.output.markdown'), action: onExportMarkdown, disabled: !canExportMarkdown }, { label: t('menu.output.reviewHtml'), action: onExportReviewHtml, disabled: !canExportReviewHtml }])}
+        <button className="header-menu-trigger" type="button" onClick={() => { setOpenMenu(null); onOpenSettings() }}>{t('menu.settings')}</button>
       </div>
       {phase === 'completed' ? <div className="phase-progress completed-progress" aria-label={t('header.currentPhaseCompleted')}><span className="completed-step">{t('phase.completed')}</span></div> : <div className="phase-progress" aria-label={t('header.currentPhase', { phase: phaseSteps[currentPhaseIndex] })}>{phaseSteps.map((label, index) => <span key={label} className={`phase-step ${index === currentPhaseIndex ? 'current' : index < currentPhaseIndex ? 'past' : 'future'}`}><span>{label}</span>{index < phaseSteps.length - 1 && <i aria-hidden="true">→</i>}</span>)}</div>}
     </div>
