@@ -1,9 +1,11 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { APP_NAME, APP_VERSION } from '../config/app'
 import { useTranslation } from '../i18n'
 import type { TranslationKey } from '../i18n/ja'
 
 type SettingsDialogProps = {
+  developerMode: boolean
+  onDeveloperModeChange: (enabled: boolean) => void
   onClose: () => void
 }
 
@@ -33,9 +35,12 @@ function SettingRows({ items }: { items: SettingOption[] }) {
   </div>)}</div>
 }
 
+const DEVELOPER_MODE_CLICK_COUNT = 15
 
-export function SettingsDialog({ onClose }: SettingsDialogProps) {
+export function SettingsDialog({ developerMode, onDeveloperModeChange, onClose }: SettingsDialogProps) {
   const closeButtonRef = useRef<HTMLButtonElement>(null)
+  const versionClickCountRef = useRef(0)
+  const [notification, setNotification] = useState('')
   const { t } = useTranslation()
 
   useEffect(() => {
@@ -47,19 +52,38 @@ export function SettingsDialog({ onClose }: SettingsDialogProps) {
     return () => document.removeEventListener('keydown', closeOnEscape)
   }, [onClose])
 
+  const handleVersionClick = () => {
+    if (developerMode) return
+    versionClickCountRef.current += 1
+    if (versionClickCountRef.current < DEVELOPER_MODE_CLICK_COUNT) return
+    versionClickCountRef.current = 0
+    onDeveloperModeChange(true)
+    setNotification(t('settings.developerEnabledNotice'))
+  }
+
+  const disableDeveloperMode = () => {
+    onDeveloperModeChange(false)
+    setNotification('')
+  }
+
   return <div className="dialog-backdrop" role="presentation" onMouseDown={event => event.target === event.currentTarget && onClose()}>
     <section className="settings-dialog" role="dialog" aria-modal="true" aria-labelledby="settings-title">
       <div className="dialog-pin" aria-hidden="true" />
       <p className="dialog-kicker">SETTINGS</p>
       <div className="settings-heading"><h2 id="settings-title">{t('settings.title')}</h2><button ref={closeButtonRef} className="settings-close" type="button" onClick={onClose} aria-label={t('settings.closeAria')}>×</button></div>
+      {notification && <p className="settings-notification" role="status">{notification}</p>}
 
       <section className="settings-section" aria-labelledby="settings-display"><h3 id="settings-display">{t('settings.display')}</h3><SettingRows items={displaySettings} /></section>
       <section className="settings-section" aria-labelledby="settings-language"><h3 id="settings-language">{t('settings.language')}</h3><SettingRows items={languageSettings} /></section>
       <section className="settings-section" aria-labelledby="settings-app"><h3 id="settings-app">{t('settings.appInfo')}</h3><div className="settings-list">
         <div className="settings-row"><strong>{t('settings.appName')}</strong><span className="settings-value">{APP_NAME}</span></div>
-        <div className="settings-row"><strong>{t('settings.version')}</strong><span className="settings-value">{APP_VERSION}</span></div>
+        <div className="settings-row"><strong>{t('settings.version')}</strong><button className="settings-value settings-version" type="button" onClick={handleVersionClick}>{APP_VERSION}</button></div>
       </div></section>
 
+      {developerMode && <section className="settings-section developer-settings-section" aria-labelledby="settings-developer"><h3 id="settings-developer">{t('settings.developer')}</h3><div className="settings-list">
+        <div className="settings-row"><strong>{t('settings.developerMode')}</strong><span className="settings-value enabled">{t('settings.enabled')}</span></div>
+        <div className="settings-row disabled" aria-disabled="true"><div><strong>{t('settings.experimental')}</strong><small>{t('settings.planned')}</small></div><span className="settings-value">{t('settings.comingSoon')}</span></div>
+      </div><button className="disable-developer-button" type="button" onClick={disableDeveloperMode}>{t('settings.disableDeveloper')}</button></section>}
 
       <div className="dialog-actions"><button type="button" className="secondary-button" onClick={onClose}>{t('common.close')}</button></div>
     </section>
