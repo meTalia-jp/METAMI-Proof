@@ -1,12 +1,14 @@
 import type { ReviewTag } from '../types/annotation'
+import { useTranslation } from '../i18n'
+import type { TranslationKey } from '../i18n/ja'
 
-export const reviewTagLabels: Record<ReviewTag, string> = {
-  question: '疑問',
-  rewrite: '修正',
-  delete: '削除',
-  add: '追記',
-  fact_check: '確認',
-  note: 'メモ',
+export const reviewTagLabelKeys: Record<ReviewTag, TranslationKey> = {
+  question: 'tag.question',
+  rewrite: 'tag.rewrite',
+  delete: 'tag.delete',
+  add: 'tag.add',
+  fact_check: 'tag.fact_check',
+  note: 'tag.note',
 }
 
 type ReviewTagPickerProps = {
@@ -15,12 +17,13 @@ type ReviewTagPickerProps = {
 }
 
 export function ReviewTagPicker({ value, onChange }: ReviewTagPickerProps) {
+  const { t } = useTranslation()
   return (
     <fieldset className="review-tag-picker">
-      <legend>意図タグ（任意・1つまで）</legend>
+      <legend>{t('tag.legend')}</legend>
       <div className="review-tag-buttons">
-        {(Object.entries(reviewTagLabels) as [ReviewTag, string][]).map(([tag, label]) => (
-          <button key={tag} type="button" className={value === tag ? 'selected' : ''} aria-pressed={value === tag} onClick={() => onChange(value === tag ? null : tag)}>{label}</button>
+        {(Object.entries(reviewTagLabelKeys) as [ReviewTag, TranslationKey][]).map(([tag, labelKey]) => (
+          <button key={tag} type="button" className={value === tag ? 'selected' : ''} aria-pressed={value === tag} onClick={() => onChange(value === tag ? null : tag)}>{t(labelKey)}</button>
         ))}
       </div>
     </fieldset>

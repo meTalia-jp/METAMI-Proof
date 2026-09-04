@@ -1,6 +1,7 @@
 import { type FormEvent, type KeyboardEvent, useEffect, useRef } from 'react'
 import type { DocumentSelection, ReviewTag } from '../types/annotation'
 import { ReviewTagPicker } from './ReviewTagPicker'
+import { useTranslation } from '../i18n'
 
 type RedPenDialogProps = {
   selection: DocumentSelection
@@ -20,6 +21,7 @@ type RedPenDialogProps = {
 export function RedPenDialog({ selection, reviewText, replacementText, replacementEnabled, tag, onReviewTextChange, onReplacementTextChange, onReplacementEnabledChange, onTagChange, onSwitchTool, onCancel, onSubmit }: RedPenDialogProps) {
   const reviewRef = useRef<HTMLTextAreaElement>(null)
   const hasContent = reviewText.trim().length > 0 || replacementEnabled
+  const { t } = useTranslation()
 
   useEffect(() => { reviewRef.current?.focus() }, [])
 
@@ -40,31 +42,31 @@ export function RedPenDialog({ selection, reviewText, replacementText, replaceme
       <section className="red-pen-dialog" role="dialog" aria-modal="true" aria-labelledby="red-pen-title">
         <div className="dialog-pin" aria-hidden="true" />
         <p className="dialog-kicker">RED PEN</p>
-        <h2 id="red-pen-title">赤ペンレビュー</h2>
-        <div className="dialog-tool-switch" role="group" aria-label="校正ツールの切替">
-          <button type="button" className="active red" aria-pressed="true">赤ペン</button>
-          <button type="button" aria-pressed="false" onClick={onSwitchTool}>蛍光</button>
+        <h2 id="red-pen-title">{t('redPen.title')}</h2>
+        <div className="dialog-tool-switch" role="group" aria-label={t('review.toolSwitch')}>
+          <button type="button" className="active red" aria-pressed="true">{t('tools.redPen')}</button>
+          <button type="button" aria-pressed="false" onClick={onSwitchTool}>{t('redPen.highlightShort')}</button>
         </div>
         <form onSubmit={submit}>
-          <label className="dialog-field source-field"><span>選択した文章</span><output tabIndex={0}>{selection.targetText}</output></label>
+          <label className="dialog-field source-field"><span>{t('review.selectedText')}</span><output tabIndex={0}>{selection.targetText}</output></label>
           <label className="dialog-field replacement-field">
-            <span>レビュー内容・質問・指示（任意）</span>
+            <span>{t('redPen.reviewText')}</span>
             <textarea ref={reviewRef} rows={3} value={reviewText} onChange={event => onReviewTextChange(event.target.value)} onKeyDown={handleKeyDown} />
           </label>
           <label className="replacement-toggle">
             <input type="checkbox" checked={replacementEnabled} onChange={event => onReplacementEnabledChange(event.target.checked)} />
-            本文へ適用できる置換案を設定する
+            {t('redPen.enableReplacement')}
           </label>
           {replacementEnabled && <label className="dialog-field replacement-field">
-            <span>置換文章（空欄は削除提案）</span>
+            <span>{t('redPen.replacementText')}</span>
             <textarea rows={4} value={replacementText} onChange={event => onReplacementTextChange(event.target.value)} onKeyDown={handleKeyDown} aria-describedby="replacement-help replacement-shortcuts" />
           </label>}
           <ReviewTagPicker value={tag} onChange={onTagChange} />
-          <p id="replacement-help" className="dialog-help">登録時点では原本と修正文書のMarkdown自体は変更されません。</p>
-          <p id="replacement-shortcuts" className="dialog-help shortcut-help">Ctrl+Enter：登録　Enter：改行　Esc：キャンセル</p>
+          <p id="replacement-help" className="dialog-help">{t('redPen.help')}</p>
+          <p id="replacement-shortcuts" className="dialog-help shortcut-help">{t('review.shortcuts')}</p>
           <div className="dialog-actions">
-            <button type="button" className="secondary-button" onClick={onCancel}>キャンセル</button>
-            <button type="submit" className="red-action" disabled={!hasContent}>登録</button>
+            <button type="button" className="secondary-button" onClick={onCancel}>{t('common.cancel')}</button>
+            <button type="submit" className="red-action" disabled={!hasContent}>{t('common.register')}</button>
           </div>
         </form>
       </section>
