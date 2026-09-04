@@ -11,6 +11,8 @@ import { MarkdownExportDialog } from './components/MarkdownExportDialog'
 import { AnnotationDeleteDialog } from './components/AnnotationDeleteDialog'
 import { PasteMarkdownDialog } from './components/PasteMarkdownDialog'
 import { SettingsDialog } from './components/SettingsDialog'
+import { AiReviewExportDialog } from './components/AiReviewExportDialog'
+import type { AiReviewMode } from './types/aiReview'
 import type { DocumentSelection, HighlightAnnotation, HighlightColor, RedPenAnnotation, ReviewTag } from './types/annotation'
 import type { ExportOriginalAnchor } from './types/portableReview'
 import { areAllReviewersCompleted, type Reviewer, type ReviewRound } from './types/review'
@@ -20,6 +22,7 @@ import { buildReviewExportData, createAnnotationId, validateReviewExportData } f
 import { renderReviewHtml } from './utils/renderReviewHtml'
 import { extractReviewJsonFromHtml, REVIEW_HTML_FORMAT_ERROR } from './utils/reviewHtmlImport'
 import { readDeveloperModeSetting, writeDeveloperModeSetting } from './config/settings'
+import { convertReviewExportDataToAiReview } from './utils/aiReview'
 
 type MobilePane = 'original' | 'draft'
 type StructureAfterAction = 'stay' | 'preview' | 'export' | 'apply-proposal'
@@ -99,6 +102,7 @@ function App() {
   const [pasteDialogOpen, setPasteDialogOpen] = useState(false)
   const [settingsDialogOpen, setSettingsDialogOpen] = useState(false)
   const [developerMode, setDeveloperMode] = useState(readDeveloperModeSetting)
+  const [aiReviewExportDialogOpen, setAiReviewExportDialogOpen] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const workDataInputRef = useRef<HTMLInputElement>(null)
   const reanchorTimerRef = useRef<number | null>(null)
@@ -111,6 +115,41 @@ function App() {
   const changeDeveloperMode = (enabled: boolean) => {
     setDeveloperMode(enabled)
     writeDeveloperModeSetting(enabled)
+  }
+
+  const exportAiReview = (mode: AiReviewMode) => {
+    if (!developerMode || !originalMarkdown) return
+    let objectUrl = ''
+    const rawBaseName = fileName.replace(/\.md$/i, '') || 'metami-proof'
+    const safeBaseName = rawBaseName.replace(/[<>:"/\\|?*\u0000-\u001f]/g, '_').replace(/[. ]+$/g, '') || 'metami-proof'
+    const aiReviewFileName = `${safeBaseName}_ai_review.json`
+    try {
+      const reviewData = buildReviewExportData({
+        sourceFileName: fileName,
+        originalMarkdown,
+        draftMarkdown,
+        reviewRound,
+        reviewers,
+        corrections: annotations,
+        highlights: highlightAnnotations,
+      })
+      const data = convertReviewExportDataToAiReview(reviewData, mode)
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json;charset=utf-8' })
+      objectUrl = URL.createObjectURL(blob)
+      const anchor = document.createElement('a')
+      anchor.href = objectUrl
+      anchor.download = aiReviewFileName
+      anchor.style.display = 'none'
+      document.body.appendChild(anchor)
+      anchor.click()
+      anchor.remove()
+      setAiReviewExportDialogOpen(false)
+      setNotice(`AI向けデータ「${aiReviewFileName}」の保存を開始しました。`)
+    } catch {
+      setNotice('AI向けデータの保存を開始できませんでした。現在の作業内容は保持されています。')
+    } finally {
+      if (objectUrl) window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1000)
+    }
   }
 
   const clearDocumentSelection = () => {
@@ -1004,7 +1043,8 @@ function App() {
       {dialogOpen && documentSelection && <RedPenDialog selection={documentSelection} reviewText={redPenReviewDraft} replacementText={redPenDraft} replacementEnabled={redPenReplacementEnabled} tag={redPenTagDraft} onReviewTextChange={setRedPenReviewDraft} onReplacementTextChange={setRedPenDraft} onReplacementEnabledChange={setRedPenReplacementEnabled} onTagChange={setRedPenTagDraft} onSwitchTool={() => switchSelectionTool('highlighter')} onCancel={clearDocumentSelection} onSubmit={addAnnotation} />}
       {highlightDialogOpen && documentSelection && <HighlightDialog selection={documentSelection} comment={highlightCommentDraft} color={highlightColor} tag={highlightTagDraft} onCommentChange={setHighlightCommentDraft} onColorChange={setHighlightColor} onTagChange={setHighlightTagDraft} onSwitchTool={() => switchSelectionTool('redPen')} onCancel={clearDocumentSelection} onSubmit={addHighlightAnnotation} />}
       {pasteDialogOpen && <PasteMarkdownDialog onCancel={() => setPasteDialogOpen(false)} onStart={markdown => startReview(markdown, 'pasted_markdown.md')} />}
-      {settingsDialogOpen && <SettingsDialog developerMode={developerMode} onDeveloperModeChange={changeDeveloperMode} onClose={() => setSettingsDialogOpen(false)} />}
+      {settingsDialogOpen && <SettingsDialog developerMode={developerMode} canExportAiReview={Boolean(originalMarkdown)} onDeveloperModeChange={changeDeveloperMode} onOpenAiReviewExport={() => { setSettingsDialogOpen(false); setAiReviewExportDialogOpen(true) }} onClose={() => setSettingsDialogOpen(false)} />}
+      {aiReviewExportDialogOpen && <AiReviewExportDialog onCancel={() => setAiReviewExportDialogOpen(false)} onCreate={exportAiReview} />}
       {lockDialogOpen && <ReviewLockDialog onCancel={() => setLockDialogOpen(false)} onConfirm={confirmReviewLock} />}
       {structureDialogOpen && <MarkdownStructureDialog changes={structureChanges} onBack={returnToStructureEditing} onApply={commitDraftEditing} applyLabel={isPolishing ? 'このまま変更' : 'このまま反映'} />}
       {polishingDialogOpen && <PolishingConfirmDialog onCancel={() => setPolishingDialogOpen(false)} onConfirm={enterPolishing} />}

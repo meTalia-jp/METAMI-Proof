@@ -5,7 +5,9 @@ import type { TranslationKey } from '../i18n/ja'
 
 type SettingsDialogProps = {
   developerMode: boolean
+  canExportAiReview: boolean
   onDeveloperModeChange: (enabled: boolean) => void
+  onOpenAiReviewExport: () => void
   onClose: () => void
 }
 
@@ -37,7 +39,7 @@ function SettingRows({ items }: { items: SettingOption[] }) {
 
 const DEVELOPER_MODE_CLICK_COUNT = 15
 
-export function SettingsDialog({ developerMode, onDeveloperModeChange, onClose }: SettingsDialogProps) {
+export function SettingsDialog({ developerMode, canExportAiReview, onDeveloperModeChange, onOpenAiReviewExport, onClose }: SettingsDialogProps) {
   const closeButtonRef = useRef<HTMLButtonElement>(null)
   const versionClickCountRef = useRef(0)
   const [notification, setNotification] = useState('')
@@ -82,7 +84,7 @@ export function SettingsDialog({ developerMode, onDeveloperModeChange, onClose }
 
       {developerMode && <section className="settings-section developer-settings-section" aria-labelledby="settings-developer"><h3 id="settings-developer">{t('settings.developer')}</h3><div className="settings-list">
         <div className="settings-row"><strong>{t('settings.developerMode')}</strong><span className="settings-value enabled">{t('settings.enabled')}</span></div>
-        <div className="settings-row disabled" aria-disabled="true"><div><strong>{t('settings.experimental')}</strong><small>{t('settings.planned')}</small></div><span className="settings-value">{t('settings.comingSoon')}</span></div>
+        <div className="settings-row settings-experiment-row"><div><strong>{t('settings.experimental')}</strong><small>{t('settings.notWorkspace')}</small></div><button className="settings-experiment-button" type="button" disabled={!canExportAiReview} onClick={onOpenAiReviewExport} title={canExportAiReview ? t('settings.typeBOpen') : t('settings.typeBNeedsDocument')}>{t('settings.typeB')}</button></div>
       </div><button className="disable-developer-button" type="button" onClick={disableDeveloperMode}>{t('settings.disableDeveloper')}</button></section>}
 
       <div className="dialog-actions"><button type="button" className="secondary-button" onClick={onClose}>{t('common.close')}</button></div>
