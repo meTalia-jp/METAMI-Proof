@@ -21,7 +21,7 @@ import { detectMarkdownStructureChanges, type MarkdownStructureChange } from './
 import { buildReviewExportData, createAnnotationId, validateReviewExportData } from './utils/portableReview'
 import { renderReviewHtml } from './utils/renderReviewHtml'
 import { extractReviewJsonFromHtml, REVIEW_HTML_FORMAT_ERROR } from './utils/reviewHtmlImport'
-import { readDeveloperModeSetting, writeDeveloperModeSetting } from './config/settings'
+import { readDeveloperModeSetting, readThemeSetting, writeDeveloperModeSetting, writeThemeSetting, type AppTheme } from './config/settings'
 import { INITIAL_REVIEW_TOOL, initialToolForPhase } from './config/reviewTools'
 import { convertReviewExportDataToAiReview } from './utils/aiReview'
 import { updateRedPenContent, updateHighlightContent } from './utils/annotationContent'
@@ -106,6 +106,7 @@ function App() {
   const [pasteDialogOpen, setPasteDialogOpen] = useState(false)
   const [settingsDialogOpen, setSettingsDialogOpen] = useState(false)
   const [developerMode, setDeveloperMode] = useState(readDeveloperModeSetting)
+  const [theme, setTheme] = useState<AppTheme>(readThemeSetting)
   const [aiReviewExportDialogOpen, setAiReviewExportDialogOpen] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const workDataInputRef = useRef<HTMLInputElement>(null)
@@ -119,6 +120,11 @@ function App() {
   const changeDeveloperMode = (enabled: boolean) => {
     setDeveloperMode(enabled)
     writeDeveloperModeSetting(enabled)
+  }
+
+  const changeTheme = (nextTheme: AppTheme) => {
+    setTheme(nextTheme)
+    writeThemeSetting(nextTheme)
   }
 
   const exportAiReview = (mode: AiReviewMode) => {
@@ -403,7 +409,7 @@ function App() {
       })
       const validated = validateReviewExportData(data)
       if (!validated.ok) throw new Error(validated.error)
-      const blob = new Blob([renderReviewHtml(data)], { type: 'text/html;charset=utf-8' })
+      const blob = new Blob([renderReviewHtml(data, theme)], { type: 'text/html;charset=utf-8' })
       objectUrl = URL.createObjectURL(blob)
       const anchor = document.createElement('a')
       anchor.href = objectUrl
@@ -1082,7 +1088,7 @@ function App() {
   const showSidebar = sidebarOpen
 
   return (
-    <div className="app-shell">
+    <div className={`app-shell theme-${theme}`}>
       <input ref={fileInputRef} className="visually-hidden" type="file" accept=".md,text/markdown,text/plain" onChange={loadMarkdown} />
       <input ref={workDataInputRef} className="visually-hidden" type="file" accept=".json,.html,application/json,text/html" onChange={loadWorkData} />
       <div className="sticky-header-stack">
@@ -1102,7 +1108,7 @@ function App() {
       {dialogOpen && annotationDialogSelection && <RedPenDialog mode={annotationEditTarget ? 'edit' : 'create'} selection={annotationDialogSelection} reviewText={redPenReviewDraft} replacementText={redPenDraft} contentMode={redPenContentMode} proposalMode={redPenProposalMode} tag={redPenTagDraft} onReviewTextChange={setRedPenReviewDraft} onReplacementTextChange={setRedPenDraft} onContentModeChange={setRedPenContentMode} onProposalModeChange={setRedPenProposalMode} onTagChange={setRedPenTagDraft} onSwitchTool={() => switchSelectionTool('highlighter')} onCancel={clearDocumentSelection} onSubmit={addAnnotation} />}
       {highlightDialogOpen && annotationDialogSelection && <HighlightDialog mode={annotationEditTarget ? 'edit' : 'create'} selection={annotationDialogSelection} comment={highlightCommentDraft} color={highlightColor} tag={highlightTagDraft} onCommentChange={setHighlightCommentDraft} onColorChange={setHighlightColor} onTagChange={setHighlightTagDraft} onSwitchTool={() => switchSelectionTool('redPen')} onCancel={clearDocumentSelection} onSubmit={addHighlightAnnotation} />}
       {pasteDialogOpen && <PasteMarkdownDialog onCancel={() => setPasteDialogOpen(false)} onStart={markdown => startReview(markdown, 'pasted_markdown.md')} />}
-      {settingsDialogOpen && <SettingsDialog developerMode={developerMode} canExportAiReview={Boolean(originalMarkdown)} onDeveloperModeChange={changeDeveloperMode} onOpenAiReviewExport={() => { setSettingsDialogOpen(false); setAiReviewExportDialogOpen(true) }} onClose={() => setSettingsDialogOpen(false)} />}
+      {settingsDialogOpen && <SettingsDialog developerMode={developerMode} theme={theme} canExportAiReview={Boolean(originalMarkdown)} onDeveloperModeChange={changeDeveloperMode} onThemeChange={changeTheme} onOpenAiReviewExport={() => { setSettingsDialogOpen(false); setAiReviewExportDialogOpen(true) }} onClose={() => setSettingsDialogOpen(false)} />}
       {aiReviewExportDialogOpen && <AiReviewExportDialog onCancel={() => setAiReviewExportDialogOpen(false)} onCreate={exportAiReview} />}
       {lockDialogOpen && <ReviewLockDialog onCancel={() => setLockDialogOpen(false)} onConfirm={confirmReviewLock} />}
       {structureDialogOpen && <MarkdownStructureDialog changes={structureChanges} onBack={returnToStructureEditing} onApply={commitDraftEditing} applyLabel={isPolishing ? 'このまま変更' : 'このまま反映'} />}

@@ -1,5 +1,6 @@
 import { renderToStaticMarkup } from 'react-dom/server'
 import { MarkdownViewer } from '../components/MarkdownViewer'
+import type { AppTheme } from '../config/settings'
 import type { HighlightAnnotation, RedPenAnnotation } from '../types/annotation'
 import type { ExportRedPenAnnotation, ReviewExportDataV2 } from '../types/portableReview'
 
@@ -53,7 +54,7 @@ function renderSidebar(data: ReviewExportDataV2) {
     </aside>`
 }
 
-export function renderReviewHtml(data: ReviewExportDataV2) {
+export function renderReviewHtml(data: ReviewExportDataV2, theme: AppTheme = 'paper') {
   const reviewerById = new Map(data.reviewers.map(reviewer => [reviewer.id, reviewer]))
   const corrections = data.annotations.filter(annotation => annotation.type === 'red_pen').map(annotation => ({
     ...annotation.originalAnchor, ...annotation, anchorStatus: annotation.draftAnchor ? 'resolved' : 'unresolved', reviewer: reviewerById.get(annotation.reviewerId),
@@ -85,6 +86,11 @@ export function renderReviewHtml(data: ReviewExportDataV2) {
   <title>${escapeHtml(title)}</title>
   <style>
     :root{--paper:#fffdf7;--canvas:#ece7dc;--ink:#2d2c28;--soft:#746e63;--red:#c52f2b;--line:#d8cfbe;--yellow:rgba(255,226,35,.72);--green:rgba(126,214,116,.62)}
+    body.review-theme-monochrome{--paper:#fff;--canvas:#f1f2f3;--ink:#111318;--soft:#555a60;--line:#b8bcc0}
+    body.review-theme-monochrome .result-header{color:#111318;background:#fff;border-color:#d92e2a;box-shadow:0 2px 10px rgba(20,23,26,.08)}body.review-theme-monochrome .result-meta{color:#4f5459}
+    body.review-theme-monochrome .review-document,body.review-theme-monochrome .review-sidebar section{border:1px solid #b8bcc0;box-shadow:0 5px 18px rgba(20,23,26,.1)}body.review-theme-monochrome .review-document h1,body.review-theme-monochrome .review-document h2,body.review-theme-monochrome .review-document h3{font-family:"Yu Gothic",sans-serif;font-weight:800}
+    body.review-theme-monochrome .review-list-item{color:#17191c;border-color:#c8cbce}body.review-theme-monochrome .review-list-item:hover,body.review-theme-monochrome .review-list-item.is-linked{background:#e9ebec}
+    body.review-theme-monochrome .result-footer{color:#555a60}body.review-theme-monochrome .attention-badge{box-shadow:0 1px 1px rgba(20,23,26,.08)}
     *{box-sizing:border-box}html{color-scheme:light}body{margin:0;color:var(--ink);background:var(--canvas);font-family:"Yu Gothic",Meiryo,sans-serif;line-height:1.8}
     .result-header{padding:22px 28px;color:#fff;background:#3c3933;border-bottom:4px solid var(--red)}
     .result-header h1{margin:0 0 12px;font-family:YuMincho,"Yu Mincho",serif;font-size:25px}.result-meta{display:flex;flex-wrap:wrap;gap:7px 18px;margin:0;color:#eee9dc;font-size:12px}.result-meta span{white-space:nowrap}
@@ -105,7 +111,7 @@ export function renderReviewHtml(data: ReviewExportDataV2) {
     @media print{body{background:#fff}.screen-only{display:none!important}.result-header{padding:12mm 10mm;color:#222;background:#fff;border-bottom:2px solid #333}.result-meta{color:#444}.review-layout{display:block;max-width:none;padding:8mm}.review-document{padding:0;border:0;box-shadow:none}.review-sidebar{position:static;margin-top:10mm;page-break-before:always}.review-sidebar section{box-shadow:none;break-inside:avoid}.review-list-item{break-inside:avoid}.result-footer{padding:0 8mm 8mm}}
   </style>
 </head>
-<body>
+<body class="review-theme-${theme}">
   <header class="result-header">
     <h1>${escapeHtml(data.generator.name)} 校正結果</h1>
     <p class="result-meta"><span>${escapeHtml(data.generator.name)} ${escapeHtml(data.generator.version)}</span><span>元ファイル：${escapeHtml(data.document.sourceFileName || '未設定')}</span><span>Round ${data.round.number}</span><span>工程：${escapeHtml(data.round.phase)}</span><span>校正者：${escapeHtml(reviewerNames)}</span><span>赤ペン：${correctionCount}件</span><span>蛍光：${highlightCount}件</span></p>

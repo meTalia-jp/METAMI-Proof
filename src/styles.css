@@ -16,6 +16,7 @@
 
 * { box-sizing: border-box; }
 body { margin: 0; min-width: 320px; min-height: 100vh; background: var(--canvas); }
+.app-shell { min-height: 100vh; color: #292924; background: var(--canvas); }
 button { font: inherit; }
 button:focus-visible { outline: 3px solid rgba(40, 90, 145, .3); outline-offset: 2px; }
 .visually-hidden { position: fixed; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
@@ -227,6 +228,11 @@ button:focus-visible { outline: 3px solid rgba(40, 90, 145, .3); outline-offset:
 .settings-row.disabled { color: #9c968c; background: #f5f2eb; }
 .settings-value { flex: 0 0 auto; padding: 4px 8px; border-radius: 4px; color: #625d54; background: #f1ede4; font-size: 11px; }
 .settings-row.disabled .settings-value { color: #999184; background: #e9e5dc; }
+.theme-setting-row { align-items: center; }
+.theme-options { display: inline-flex !important; grid-auto-flow: column; gap: 4px !important; padding: 3px; border: 1px solid #cbc3b5; border-radius: 6px; background: #eee9df; }
+.theme-options button { min-height: 30px; padding: 4px 10px; border: 1px solid transparent; border-radius: 4px; color: #615c53; background: transparent; cursor: pointer; font-size: 10px; font-weight: 700; }
+.theme-options button:hover { color: #222; border-color: #aaa294; background: #fff; }
+.theme-options button.selected { color: #fff; border-color: #3d3d3d; background: #454545; box-shadow: 0 1px 3px rgba(0,0,0,.24); }
 .settings-version { border: 0; cursor: default; font: inherit; }
 .settings-notification { margin: -8px 0 18px; padding: 9px 12px; border: 1px solid #c8d8bd; border-radius: 5px; color: #45643d; background: #eef6e8; font-size: 12px; font-weight: 700; }
 .developer-settings-section { padding-top: 2px; border-top: 1px dashed #d8cdb9; }
@@ -345,6 +351,99 @@ button:focus-visible { outline: 3px solid rgba(40, 90, 145, .3); outline-offset:
 .polishing-view-switch button:hover { color: var(--blue); border-color: var(--blue); }
 .card-1 { background: #fff9dc; transform: rotate(.4deg); }.card-2 { border-left: 3px solid var(--shu); }.card-3 { border-left: 3px solid var(--blue); }
 .mobile-tabs { display: none; }
+
+/* Monochrome is a light, modern reading theme. Functional pen and workflow
+   colors remain reserved for meaning instead of decoration. */
+.theme-monochrome {
+  --paper: #fff;
+  --canvas: #f1f2f3;
+  --grid: rgba(22, 24, 27, .035);
+  --ink-soft: #54585d;
+  --line: #c4c7ca;
+  --shu: #d92e2a;
+  --blue: #175bb2;
+  --shadow: 0 4px 16px rgba(24, 27, 30, .1);
+  color: #17191c;
+}
+.theme-monochrome .app-header { color: #17191c; background: rgba(255,255,255,.98); border-color: #b7babd; box-shadow: 0 2px 10px rgba(20,23,26,.08); }
+.theme-monochrome .brand { font-family: "Yu Gothic", sans-serif; font-weight: 800; letter-spacing: .02em; }
+.theme-monochrome .brand-version,
+.theme-monochrome .tool-shelf-label,
+.theme-monochrome .reviewer,
+.theme-monochrome .reviewer-progress { color: #5f6469; }
+.theme-monochrome .tools { border-color: #c9cccf; background: #fafafa; }
+.theme-monochrome .header-menu-trigger,
+.theme-monochrome .tool-button,
+.theme-monochrome .icon-button { color: #222529; border-color: #b6babf; background: #fff; box-shadow: 0 1px 2px rgba(20,23,26,.05); }
+.theme-monochrome .header-menu-trigger:hover,
+.theme-monochrome .header-menu-trigger[aria-expanded="true"],
+.theme-monochrome .icon-button:hover { color: #111; border-color: #4c5157; background: #f0f1f2; }
+.theme-monochrome .header-menu-panel { border: 1px solid #777c82; background: #fff; box-shadow: 0 10px 26px rgba(22,25,28,.16); }
+.theme-monochrome .header-menu-panel button { color: #202327; }
+.theme-monochrome .header-menu-panel button:hover { color: #111; background: #e9eaeb; }
+.theme-monochrome .header-menu-panel button:disabled { color: #777c82; background: transparent; }
+.theme-monochrome .layout-switch { border-color: #c1c4c7; background: #f0f1f2; }
+.theme-monochrome .layout-switch button { color: #50555a; }
+.theme-monochrome .layout-switch button.selected { color: #fff; background: #292c30; }
+.theme-monochrome .phase-progress { border-color: #c4c7ca; }
+.theme-monochrome .phase-step { color: #64696e; opacity: .78; }
+.theme-monochrome .phase-step > span { border-color: #c2c5c8; background: #fafafa; }
+.theme-monochrome .phase-step.current { color: var(--shu); text-shadow: none; }
+.theme-monochrome .phase-step.current > span { border-color: var(--shu); background: #fff; }
+.theme-monochrome .phase-step i { color: #25282c; }
+.theme-monochrome .tool-button.selected { outline: 2px solid #3e4348; outline-offset: 2px; }
+.theme-monochrome .tool-button.selected:has(.tool-mark.red) { color: #c9211d; border-color: #e13631; background: #fff8f7; }
+.theme-monochrome .tool-button.selected:has(.tool-mark.yellow) { color: #665006; border-color: #cda900; background: #fffbe1; }
+.theme-monochrome .tool-button.selected:has(.tool-mark.eraser) { color: #202327; border-color: #555a60; background: #f0f1f2; }
+.theme-monochrome .header-workflow { color: #8f211e; background: #fff; border-color: #c7cacf; }
+.theme-monochrome .header-workflow.all-complete { color: #315f2c; background: #f4f7f3; border-color: #9baa97; }
+.theme-monochrome .selection-notice { color: #17130a; background: #ffe883; border-color: #b49b2c; }
+.theme-monochrome .document-pane { color: #111318; border: 1px solid #b8bcc0; border-top: 3px solid #282b2f; box-shadow: 0 5px 18px rgba(20,23,26,.1); background: #fff; }
+.theme-monochrome .document-pane.draft { border-top-color: var(--shu); }
+.theme-monochrome .pane-heading { color: #111318; background: #fff; border-color: #d0d2d4; }
+.theme-monochrome .pane-heading h2 { font-family: "Yu Gothic", sans-serif; font-weight: 800; }
+.theme-monochrome .pane-kicker,
+.theme-monochrome .file-strip { color: #555a60; }
+.theme-monochrome .file-strip,
+.theme-monochrome .draft-mode-switch { background: #f1f2f3; border-color: #d0d2d4; }
+.theme-monochrome .status-tag { color: #292d31; border: 1px solid #aeb2b6; background: #fff; }
+.theme-monochrome .markdown-body { color: #111318; background: #fff; }
+.theme-monochrome .markdown-body h1,
+.theme-monochrome .markdown-body h2,
+.theme-monochrome .markdown-body h3 { font-family: "Yu Gothic", sans-serif; font-weight: 800; }
+.theme-monochrome .markdown-body h1 { border-color: #272a2e; }
+.theme-monochrome .markdown-body blockquote { color: #292d31; background: #f1f2f3; border-color: #565c63; }
+.theme-monochrome .markdown-body code { color: #8d201d; background: #e9eaeb; }
+.theme-monochrome .side-card { color: #15171a; border: 1px solid #c2c5c8; box-shadow: 0 4px 14px rgba(20,23,26,.08); background: #fff; }
+.theme-monochrome .side-card::before { display: none; }
+.theme-monochrome .workflow-card,
+.theme-monochrome .card-1 { background: #fff; }
+.theme-monochrome .side-card p,
+.theme-monochrome .pending-list button { color: #35393e; }
+.theme-monochrome .pending-list button:hover,
+.theme-monochrome .pending-list button.active { color: #8f211e; background: #eceeef; outline: 2px solid #74797f; }
+.theme-monochrome .attention-badge { border-width: 1px; box-shadow: 0 1px 1px rgba(20,23,26,.08); }
+.theme-monochrome .dialog-backdrop { background: rgba(30,33,36,.38); }
+.theme-monochrome .red-pen-dialog,
+.theme-monochrome .review-lock-dialog,
+.theme-monochrome .polishing-confirm-dialog,
+.theme-monochrome .markdown-export-dialog,
+.theme-monochrome .structure-dialog,
+.theme-monochrome .settings-dialog,
+.theme-monochrome .ai-review-export-dialog { color: #111318; border-color: #888d92; background: #fff; box-shadow: 0 18px 48px rgba(20,23,26,.24); }
+.theme-monochrome .red-pen-dialog { border-top-color: var(--shu); }
+.theme-monochrome .highlight-dialog { border-top-color: #d3ad20; }
+.theme-monochrome .red-pen-dialog output { border-color: #b9bdc1; background: #f3f4f5; }
+.theme-monochrome .red-pen-dialog textarea { color: #111318; background: #fff; }
+.theme-monochrome .settings-list { border-color: #b7bbc0; }
+.theme-monochrome .settings-row { color: #17191c; border-color: #d4d6d8; }
+.theme-monochrome .settings-row.disabled { color: #666b70; background: #eceeef; }
+.theme-monochrome .theme-options { border-color: #b7bbc0; background: #eceeef; }
+.theme-monochrome .theme-options button { color: #292d31; }
+.theme-monochrome .theme-options button.selected { color: #fff; border-color: #111318; background: #292c30; outline: 1px solid #696e73; }
+.theme-monochrome button:focus-visible,
+.theme-monochrome [role="button"]:focus-visible { outline: 3px solid #1769bd; outline-offset: 3px; }
+.theme-monochrome button:disabled { opacity: 1; color: #73787d; border-color: #c1c4c7; background: #e7e9eb; cursor: not-allowed; }
 
 @media (max-width: 1500px) {
   .header-primary { flex-wrap: wrap; gap: 7px 12px; }

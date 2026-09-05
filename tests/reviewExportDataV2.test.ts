@@ -52,6 +52,10 @@ assert(!validateReviewExportData(unknownField).ok, '未知フィールドを拒�
 assert(!validateReviewExportData({ ...data, schemaVersion: '1.1' }).ok, 'V1形式を拒否できません')
 
 const html = renderReviewHtml(data)
+const monochromeHtml = renderReviewHtml(data, 'monochrome')
+assert(html.includes('<body class="review-theme-paper">'), 'PaperテーマがReview HTMLへ反映されません')
+assert(monochromeHtml.includes('<body class="review-theme-monochrome">'), 'MonochromeテーマがReview HTMLへ反映されません')
+assert(monochromeHtml.includes('body.review-theme-monochrome{'), 'Monochrome用HTMLスタイルがありません')
 assert(html.includes('<meta name="metami-proof-format" content="review">'), 'FORMAT MARKERがありません')
 assert(html.includes('[修正]') && html.includes('[本文案]'), 'Review HTMLにtag／本文案バッジがありません')
 assert(html.includes('<b>コメント：</b>簡潔にしてください'), 'Review HTMLでreviewTextがコメント表示されません')
@@ -61,5 +65,7 @@ assert(embedded, 'HTML埋め込みJSONがありません')
 const roundTrip = JSON.parse(embedded!)
 assert(validateReviewExportData(roundTrip).ok, 'HTML埋め込みJSONの往復検証に失敗しました')
 assert(JSON.stringify(roundTrip) === JSON.stringify(data), 'HTML埋め込みJSONが元データと一致しません')
+const monochromeEmbedded = monochromeHtml.match(/<script type="application\/json" id="metami-proof-review-data">([\s\S]*?)<\/script>/)?.[1]
+assert(monochromeEmbedded && monochromeEmbedded === embedded, 'テーマによってHTML埋め込みReview JSONが変化しています')
 
 console.log('ReviewExportData 2.0 Nightly revision 1 tests: PASS')

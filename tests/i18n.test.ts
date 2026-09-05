@@ -7,6 +7,7 @@ assert(ja['menu.document'] === '文書', '文書メニューの日本語が変�
 assert(ja['menu.workData'] === '作業データ', '作業データメニューの日本語が変わっています')
 assert(ja['menu.output'] === '出力', '出力メニューの日本語が変わっています')
 assert(ja['menu.settings'] === '設定', '設定メニューの日本語が変わっています')
+assert(ja['settings.paper'] === 'Paper' && ja['settings.monochrome'] === 'Monochrome', 'テーマ表示名が不足しています')
 assert(ja['common.cancel'] === 'キャンセル' && ja['common.close'] === '閉じる', '共通ボタンの日本語が変わっています')
 
 const internalTagIds = ['question', 'rewrite', 'delete', 'add', 'fact_check', 'note'] as const
