@@ -4,7 +4,8 @@ import { ReviewTagPicker } from './ReviewTagPicker'
 import { useTranslation } from '../i18n'
 
 type HighlightDialogProps = {
-  selection: DocumentSelection
+  selection: Pick<DocumentSelection, 'targetText'>
+  mode?: 'create' | 'edit'
   comment: string
   color: HighlightColor
   tag: ReviewTag | null
@@ -16,7 +17,7 @@ type HighlightDialogProps = {
   onSubmit: (comment: string, tag: ReviewTag | null, color: HighlightColor) => void
 }
 
-export function HighlightDialog({ selection, comment, color, tag, onCommentChange, onColorChange, onTagChange, onSwitchTool, onCancel, onSubmit }: HighlightDialogProps) {
+export function HighlightDialog({ selection, mode = 'create', comment, color, tag, onCommentChange, onColorChange, onTagChange, onSwitchTool, onCancel, onSubmit }: HighlightDialogProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const { t } = useTranslation()
 
@@ -45,11 +46,11 @@ export function HighlightDialog({ selection, comment, color, tag, onCommentChang
       <section className="red-pen-dialog highlight-dialog" role="dialog" aria-modal="true" aria-labelledby="highlight-dialog-title">
         <div className="dialog-pin highlight-pin" aria-hidden="true" />
         <p className="dialog-kicker highlight-kicker">HIGHLIGHT</p>
-        <h2 id="highlight-dialog-title">{t('highlight.title')}</h2>
-        <div className="dialog-tool-switch" role="group" aria-label={t('review.toolSwitch')}>
+        <h2 id="highlight-dialog-title">{t(mode === 'edit' ? 'highlight.editTitle' : 'highlight.title')}</h2>
+        {mode === 'create' && <div className="dialog-tool-switch" role="group" aria-label={t('review.toolSwitch')}>
           <button type="button" aria-pressed="false" onClick={onSwitchTool}>{t('tools.redPen')}</button>
           <button type="button" className="active highlight" aria-pressed="true">{t('redPen.highlightShort')}</button>
-        </div>
+        </div>}
         <form onSubmit={submit}>
           <label className="dialog-field source-field">
             <span>{t('highlight.selection')}</span>
@@ -65,10 +66,10 @@ export function HighlightDialog({ selection, comment, color, tag, onCommentChang
             <button type="button" className={`color-choice green ${color === 'green' ? 'selected' : ''}`} aria-pressed={color === 'green'} onClick={() => onColorChange('green')}><span />{t('highlight.green')}</button>
           </fieldset>
           <ReviewTagPicker value={tag} onChange={onTagChange} />
-          <p id="highlight-shortcuts" className="dialog-help">{t('review.shortcuts')}</p>
+          <p id="highlight-shortcuts" className="dialog-help">{t(mode === 'edit' ? 'review.editShortcuts' : 'review.shortcuts')}</p>
           <div className="dialog-actions">
             <button type="button" className="secondary-button" onClick={onCancel}>{t('common.cancel')}</button>
-            <button type="submit" className="highlight-action">{t('common.register')}</button>
+            <button type="submit" className="highlight-action">{t(mode === 'edit' ? 'common.update' : 'common.register')}</button>
           </div>
         </form>
       </section>

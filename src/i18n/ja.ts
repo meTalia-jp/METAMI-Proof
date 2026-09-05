@@ -1,4 +1,8 @@
 export const ja = {
+  'common.update': '更新',
+  'redPen.editTitle': '赤ペンのアテンションを編集',
+  'highlight.editTitle': '蛍光ペンのアテンションを編集',
+  'review.editShortcuts': 'Ctrl+Enter：更新　Enter：改行　Esc：キャンセル',
   'common.cancel': 'キャンセル',
   'common.close': '閉じる',
   'common.create': '作成',

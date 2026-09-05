@@ -12,7 +12,7 @@ type DocumentPaneProps = {
   activeAnnotationId?: string | null
   draftEditing?: boolean
   onOriginalSelection?: () => void
-  onAnnotationClick?: (annotationId: string) => void
+  onAnnotationClick?: (annotationId: string) => boolean | void
   eraserActive?: boolean
   onAnnotationDeleteRequest?: (annotationId: string) => void
   onDraftEditingChange?: (editing: boolean) => void
@@ -100,7 +100,11 @@ export function DocumentPane({ kind, markdown, fileName, annotations, highlights
       onAnnotationDeleteRequest?.(annotationId)
       return
     }
-    onAnnotationClick?.(annotationId)
+    if (onAnnotationClick?.(annotationId)) {
+      markerRef.current = null
+      setCommentPopover(null)
+      return
+    }
 
     const marker = (event.target as HTMLElement).closest<HTMLElement>('.highlight-comment-marker')
     const highlight = marker ? highlights.find(item => item.id === annotationId && item.comment) : undefined

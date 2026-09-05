@@ -23,6 +23,7 @@ import { renderReviewHtml } from './utils/renderReviewHtml'
 import { extractReviewJsonFromHtml, REVIEW_HTML_FORMAT_ERROR } from './utils/reviewHtmlImport'
 import { readDeveloperModeSetting, writeDeveloperModeSetting } from './config/settings'
 import { convertReviewExportDataToAiReview } from './utils/aiReview'
+import { updateRedPenContent, updateHighlightContent } from './utils/annotationContent'
 
 type MobilePane = 'original' | 'draft'
 type StructureAfterAction = 'stay' | 'preview' | 'export' | 'apply-proposal'
@@ -73,6 +74,7 @@ function App() {
   const [highlightAnnotations, setHighlightAnnotations] = useState<HighlightAnnotation[]>([])
   const [documentSelection, setDocumentSelection] = useState<DocumentSelection | null>(null)
   const [dialogOpen, setDialogOpen] = useState(false)
+  const [annotationEditTarget, setAnnotationEditTarget] = useState<{ kind: 'red_pen' | 'highlight'; id: string } | null>(null)
   const [highlightDialogOpen, setHighlightDialogOpen] = useState(false)
   const [redPenReviewDraft, setRedPenReviewDraft] = useState('')
   const [redPenDraft, setRedPenDraft] = useState('')
@@ -153,6 +155,7 @@ function App() {
   }
 
   const clearDocumentSelection = () => {
+    setAnnotationEditTarget(null)
     setDocumentSelection(null)
     setDialogOpen(false)
     setHighlightDialogOpen(false)
@@ -413,6 +416,7 @@ function App() {
   }
 
   const captureDocumentSelection = () => {
+    if (annotationEditTarget) return
     if (!canAddAnnotations) {
       setNotice('校正はロックされています。修正フェーズでは赤ペン指示を追加できません。')
       return
@@ -552,6 +556,13 @@ function App() {
   }
 
   const addAnnotation = (reviewText: string | undefined, replacementText: string | undefined, tag: ReviewTag | null) => {
+    if (annotationEditTarget) {
+      if (!canAddAnnotations || annotationEditTarget.kind !== 'red_pen' || (!reviewText?.trim() && replacementText === undefined)) return
+      setAnnotations(current => current.map(item => item.id === annotationEditTarget.id && item.status === 'pending'
+        ? updateRedPenContent(item, reviewText, replacementText, tag) : item))
+      clearDocumentSelection()
+      return
+    }
     if (!documentSelection || !canAddAnnotations) return
     const originalAnchor = {
       targetText: documentSelection.targetText,
@@ -600,6 +611,13 @@ function App() {
   }
 
   const addHighlightAnnotation = (comment: string, tag: ReviewTag | null, color: HighlightColor) => {
+    if (annotationEditTarget) {
+      if (!canAddAnnotations || annotationEditTarget.kind !== 'highlight') return
+      setHighlightAnnotations(current => current.map(item => item.id === annotationEditTarget.id
+        ? updateHighlightContent(item, comment, color, tag) : item))
+      clearDocumentSelection()
+      return
+    }
     if (!documentSelection || !canAddAnnotations || activeTool !== 'highlighter') return
     const originalAnchor = {
       targetText: documentSelection.targetText,
@@ -636,7 +654,7 @@ function App() {
   }
 
   const switchSelectionTool = (nextTool: 'redPen' | 'highlighter') => {
-    if (!canAddAnnotations) return
+    if (!canAddAnnotations || annotationEditTarget) return
     const redPenHasInput = dialogOpen && (redPenReviewDraft.trim() !== '' || redPenDraft !== documentSelection?.targetText || !redPenReplacementEnabled || redPenTagDraft !== null)
     const highlightHasInput = highlightDialogOpen && (highlightCommentDraft.trim() !== '' || highlightTagDraft !== null)
     if ((redPenHasInput || highlightHasInput) && !window.confirm('入力済みの内容は引き継がれません。ペンを持ち替えますか？')) return
@@ -664,6 +682,7 @@ function App() {
 
   const requestAnnotationDelete = (annotationId: string) => {
     if (reviewRound.phase !== 'reviewing') return
+    setAnnotationEditTarget(null)
     if (annotations.some(annotation => annotation.id === annotationId)) {
       setDeleteTarget({ kind: 'red_pen', id: annotationId })
     } else if (highlightAnnotations.some(annotation => annotation.id === annotationId)) {
@@ -841,6 +860,35 @@ function App() {
     }
   }
 
+  const handleBodyAnnotationClick = (annotationId: string): boolean => {
+    selectAnnotation(annotationId)
+    if (!canAddAnnotations) return false
+    const red = annotations.find(item => item.id === annotationId)
+    const highlight = highlightAnnotations.find(item => item.id === annotationId)
+    if (red && red.status !== 'pending') return false
+    if (!red && !highlight) return false
+    setDocumentSelection(null)
+    setNotice('')
+    window.getSelection()?.removeAllRanges()
+    if (red) {
+      setAnnotationEditTarget({ kind: 'red_pen', id: red.id })
+      setRedPenReviewDraft(red.reviewText ?? '')
+      setRedPenDraft(red.replacementText ?? '')
+      setRedPenReplacementEnabled(red.replacementText !== undefined)
+      setRedPenTagDraft(red.tag ?? null)
+      setDialogOpen(true)
+      setHighlightDialogOpen(false)
+    } else if (highlight) {
+      setAnnotationEditTarget({ kind: 'highlight', id: highlight.id })
+      setHighlightCommentDraft(highlight.comment ?? '')
+      setHighlightTagDraft(highlight.tag ?? null)
+      setHighlightColor(highlight.color)
+      setHighlightDialogOpen(true)
+      setDialogOpen(false)
+    }
+    return true
+  }
+
   const completeAnnotation = (annotationId: string, changed: boolean) => {
     if (reviewRound.phase !== 'revising') return
     const target = annotations.find(annotation => annotation.id === annotationId)
@@ -1012,11 +1060,14 @@ function App() {
   }
 
   const isPolishing = reviewRound.phase === 'polishing'
+  const annotationDialogSelection = annotationEditTarget
+    ? (annotationEditTarget.kind === 'red_pen' ? annotations : highlightAnnotations).find(item => item.id === annotationEditTarget.id)?.originalAnchor
+    : documentSelection
   const eraserActive = activeTool === 'eraser' && reviewRound.phase === 'reviewing'
   const hideDraftAnnotations = isPolishing || reviewRound.phase === 'completed'
   const panes = {
-    original: <DocumentPane kind="original" markdown={originalMarkdown} fileName={fileName} annotations={annotations} highlights={highlightAnnotations} documentSelection={documentSelection} activeAnnotationId={activeAnnotationId} onOriginalSelection={canAddAnnotations ? captureDocumentSelection : undefined} onAnnotationClick={selectAnnotation} eraserActive={eraserActive} onAnnotationDeleteRequest={requestAnnotationDelete} />,
-    draft: <DocumentPane kind="draft" markdown={draftMarkdown} fileName={fileName} annotations={hideDraftAnnotations ? [] : annotations} highlights={[]} activeAnnotationId={activeAnnotationId} draftEditing={draftEditing} draftCanEdit={reviewRound.phase === 'revising' || reviewRound.phase === 'polishing'} editingMarkdown={editingDraftMarkdown} directEditing={isPolishing} editSelection={editSelection} onAnnotationClick={selectAnnotation} onDraftEditingChange={setDraftEditing} onBeginDraftEditing={beginDraftEditing} onEditingDraftChange={isPolishing ? updatePolishingDraft : setEditingDraftMarkdown} onCancelDraftEditing={cancelDraftEditing} onApplyDraftEditing={requestDraftCommit} onRequestPreview={requestPolishingPreview} />,
+    original: <DocumentPane kind="original" markdown={originalMarkdown} fileName={fileName} annotations={annotations} highlights={highlightAnnotations} documentSelection={documentSelection} activeAnnotationId={activeAnnotationId} onOriginalSelection={canAddAnnotations ? captureDocumentSelection : undefined} onAnnotationClick={handleBodyAnnotationClick} eraserActive={eraserActive} onAnnotationDeleteRequest={requestAnnotationDelete} />,
+    draft: <DocumentPane kind="draft" markdown={draftMarkdown} fileName={fileName} annotations={hideDraftAnnotations ? [] : annotations} highlights={[]} activeAnnotationId={activeAnnotationId} draftEditing={draftEditing} draftCanEdit={reviewRound.phase === 'revising' || reviewRound.phase === 'polishing'} editingMarkdown={editingDraftMarkdown} directEditing={isPolishing} editSelection={editSelection} onAnnotationClick={handleBodyAnnotationClick} onDraftEditingChange={setDraftEditing} onBeginDraftEditing={beginDraftEditing} onEditingDraftChange={isPolishing ? updatePolishingDraft : setEditingDraftMarkdown} onCancelDraftEditing={cancelDraftEditing} onApplyDraftEditing={requestDraftCommit} onRequestPreview={requestPolishingPreview} />,
   }
   const paneOrder: MobilePane[] = swapped ? ['draft', 'original'] : ['original', 'draft']
   const visiblePanes: MobilePane[] = paneLayout === 'reviewOnly' ? ['original'] : paneLayout === 'revisionOnly' ? ['draft'] : paneOrder
@@ -1040,8 +1091,8 @@ function App() {
         </div>
         {showSidebar && <Sidebar annotations={annotations} highlights={highlightAnnotations} activeAnnotationId={activeAnnotationId} onClose={() => setSidebarOpen(false)} onSelectAnnotation={selectAnnotation} onComplete={completeAnnotation} onApplyProposal={applyAnnotationProposal} onEdit={editAnnotation} onReopen={reopenAnnotation} onDeleteRequest={requestAnnotationDelete} phase={reviewRound.phase} />}
       </main>
-      {dialogOpen && documentSelection && <RedPenDialog selection={documentSelection} reviewText={redPenReviewDraft} replacementText={redPenDraft} replacementEnabled={redPenReplacementEnabled} tag={redPenTagDraft} onReviewTextChange={setRedPenReviewDraft} onReplacementTextChange={setRedPenDraft} onReplacementEnabledChange={setRedPenReplacementEnabled} onTagChange={setRedPenTagDraft} onSwitchTool={() => switchSelectionTool('highlighter')} onCancel={clearDocumentSelection} onSubmit={addAnnotation} />}
-      {highlightDialogOpen && documentSelection && <HighlightDialog selection={documentSelection} comment={highlightCommentDraft} color={highlightColor} tag={highlightTagDraft} onCommentChange={setHighlightCommentDraft} onColorChange={setHighlightColor} onTagChange={setHighlightTagDraft} onSwitchTool={() => switchSelectionTool('redPen')} onCancel={clearDocumentSelection} onSubmit={addHighlightAnnotation} />}
+      {dialogOpen && annotationDialogSelection && <RedPenDialog mode={annotationEditTarget ? 'edit' : 'create'} selection={annotationDialogSelection} reviewText={redPenReviewDraft} replacementText={redPenDraft} replacementEnabled={redPenReplacementEnabled} tag={redPenTagDraft} onReviewTextChange={setRedPenReviewDraft} onReplacementTextChange={setRedPenDraft} onReplacementEnabledChange={setRedPenReplacementEnabled} onTagChange={setRedPenTagDraft} onSwitchTool={() => switchSelectionTool('highlighter')} onCancel={clearDocumentSelection} onSubmit={addAnnotation} />}
+      {highlightDialogOpen && annotationDialogSelection && <HighlightDialog mode={annotationEditTarget ? 'edit' : 'create'} selection={annotationDialogSelection} comment={highlightCommentDraft} color={highlightColor} tag={highlightTagDraft} onCommentChange={setHighlightCommentDraft} onColorChange={setHighlightColor} onTagChange={setHighlightTagDraft} onSwitchTool={() => switchSelectionTool('redPen')} onCancel={clearDocumentSelection} onSubmit={addHighlightAnnotation} />}
       {pasteDialogOpen && <PasteMarkdownDialog onCancel={() => setPasteDialogOpen(false)} onStart={markdown => startReview(markdown, 'pasted_markdown.md')} />}
       {settingsDialogOpen && <SettingsDialog developerMode={developerMode} canExportAiReview={Boolean(originalMarkdown)} onDeveloperModeChange={changeDeveloperMode} onOpenAiReviewExport={() => { setSettingsDialogOpen(false); setAiReviewExportDialogOpen(true) }} onClose={() => setSettingsDialogOpen(false)} />}
       {aiReviewExportDialogOpen && <AiReviewExportDialog onCancel={() => setAiReviewExportDialogOpen(false)} onCreate={exportAiReview} />}
