@@ -1,5 +1,6 @@
 import type { HighlightAnnotation, RedPenAnnotation } from '../types/annotation'
 import type { ReviewPhase } from '../types/review'
+import { useTranslation } from '../i18n'
 
 type SidebarProps = {
   annotations: RedPenAnnotation[]
@@ -24,6 +25,7 @@ const statusLabel = (annotation: RedPenAnnotation) => {
 const highlightColorLabel = (color: HighlightAnnotation['color']) => color === 'green' ? '緑' : color === 'yellow' ? '黄色' : color
 
 export function Sidebar({ annotations, highlights, activeAnnotationId, onClose, onSelectAnnotation, onComplete, onApplyProposal, onEdit, onReopen, onDeleteRequest, phase }: SidebarProps) {
+  const { t } = useTranslation()
   const activeAnnotation = annotations.find(annotation => annotation.id === activeAnnotationId)
   const activeHighlight = highlights.find(annotation => annotation.id === activeAnnotationId)
   const pending = annotations.filter(annotation => annotation.status === 'pending')
@@ -49,8 +51,8 @@ export function Sidebar({ annotations, highlights, activeAnnotationId, onClose, 
             <span className={`workflow-status ${activeAnnotation.status}`}>{statusLabel(activeAnnotation)}</span>
             <div className="instruction-details">
               <p><span>元の校正対象</span><del>{activeAnnotation.targetText}</del></p>
-              {activeAnnotation.reviewText !== undefined && <p><span>レビュー内容</span><output>{activeAnnotation.reviewText}</output></p>}
-              {activeAnnotation.replacementText !== undefined && <p><span>置換案</span><strong>{activeAnnotation.replacementText || '（削除）'}</strong></p>}
+              {activeAnnotation.reviewText !== undefined && <p><span>{t('redPen.comment')}</span><output>{activeAnnotation.reviewText}</output></p>}
+              {activeAnnotation.replacementText !== undefined && <p><span>{t(activeAnnotation.replacementText === '' ? 'redPen.deleteProposal' : 'redPen.proposal')}</span><strong>{activeAnnotation.replacementText || t('redPen.deleteProposalHelp')}</strong></p>}
               {activeAnnotation.resultText !== undefined && <p><span>完了時の結果</span><output>{activeAnnotation.resultText || '（該当テキストなし）'}</output></p>}
             </div>
             {activeAnnotation.anchorStatus === 'unresolved' && <p className="anchor-warning">⚠ 対応位置を自動特定できません。原本側の指示を確認してください。</p>}

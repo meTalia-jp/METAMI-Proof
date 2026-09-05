@@ -53,6 +53,9 @@ assert(!validateReviewExportData({ ...data, schemaVersion: '1.1' }).ok, 'V1形�
 
 const html = renderReviewHtml(data)
 assert(html.includes('<meta name="metami-proof-format" content="review">'), 'FORMAT MARKERがありません')
+assert(html.includes('[修正]') && html.includes('[本文案]'), 'Review HTMLにtag／本文案バッジがありません')
+assert(html.includes('<b>コメント：</b>簡潔にしてください'), 'Review HTMLでreviewTextがコメント表示されません')
+assert(!html.includes('highlight-comment-marker') && !html.includes('💬'), 'Review HTMLに旧吹き出しが残っています')
 const embedded = html.match(/<script type="application\/json" id="metami-proof-review-data">([\s\S]*?)<\/script>/)?.[1]
 assert(embedded, 'HTML埋め込みJSONがありません')
 const roundTrip = JSON.parse(embedded!)

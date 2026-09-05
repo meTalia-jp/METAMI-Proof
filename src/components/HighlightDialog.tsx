@@ -43,7 +43,7 @@ export function HighlightDialog({ selection, mode = 'create', comment, color, ta
 
   return (
     <div className="dialog-backdrop" role="presentation" onMouseDown={event => event.target === event.currentTarget && onCancel()}>
-      <section className="red-pen-dialog highlight-dialog" role="dialog" aria-modal="true" aria-labelledby="highlight-dialog-title">
+      <section className="red-pen-dialog attention-dialog highlight-dialog" role="dialog" aria-modal="true" aria-labelledby="highlight-dialog-title">
         <div className="dialog-pin highlight-pin" aria-hidden="true" />
         <p className="dialog-kicker highlight-kicker">HIGHLIGHT</p>
         <h2 id="highlight-dialog-title">{t(mode === 'edit' ? 'highlight.editTitle' : 'highlight.title')}</h2>

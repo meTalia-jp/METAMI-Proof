@@ -22,6 +22,7 @@ import { buildReviewExportData, createAnnotationId, validateReviewExportData } f
 import { renderReviewHtml } from './utils/renderReviewHtml'
 import { extractReviewJsonFromHtml, REVIEW_HTML_FORMAT_ERROR } from './utils/reviewHtmlImport'
 import { readDeveloperModeSetting, writeDeveloperModeSetting } from './config/settings'
+import { INITIAL_REVIEW_TOOL, initialToolForPhase } from './config/reviewTools'
 import { convertReviewExportDataToAiReview } from './utils/aiReview'
 import { updateRedPenContent, updateHighlightContent } from './utils/annotationContent'
 
@@ -69,7 +70,7 @@ function App() {
   const [sidebarOpen, setSidebarOpen] = useState(true)
   const [mobilePane, setMobilePane] = useState<MobilePane>('original')
   const [paneLayout, setPaneLayout] = useState<PaneLayout>('reviewOnly')
-  const [activeTool, setActiveTool] = useState<ActiveTool>('redPen')
+  const [activeTool, setActiveTool] = useState<ActiveTool>(INITIAL_REVIEW_TOOL)
   const [annotations, setAnnotations] = useState<RedPenAnnotation[]>([])
   const [highlightAnnotations, setHighlightAnnotations] = useState<HighlightAnnotation[]>([])
   const [documentSelection, setDocumentSelection] = useState<DocumentSelection | null>(null)
@@ -78,7 +79,8 @@ function App() {
   const [highlightDialogOpen, setHighlightDialogOpen] = useState(false)
   const [redPenReviewDraft, setRedPenReviewDraft] = useState('')
   const [redPenDraft, setRedPenDraft] = useState('')
-  const [redPenReplacementEnabled, setRedPenReplacementEnabled] = useState(true)
+  const [redPenContentMode, setRedPenContentMode] = useState<'comment' | 'proposal'>('comment')
+  const [redPenProposalMode, setRedPenProposalMode] = useState<'none' | 'text' | 'delete'>('none')
   const [redPenTagDraft, setRedPenTagDraft] = useState<ReviewTag | null>(null)
   const [highlightCommentDraft, setHighlightCommentDraft] = useState('')
   const [highlightTagDraft, setHighlightTagDraft] = useState<ReviewTag | null>(null)
@@ -161,7 +163,8 @@ function App() {
     setHighlightDialogOpen(false)
     setRedPenReviewDraft('')
     setRedPenDraft('')
-    setRedPenReplacementEnabled(true)
+    setRedPenContentMode('comment')
+    setRedPenProposalMode('none')
     setRedPenTagDraft(null)
     setHighlightCommentDraft('')
     setHighlightTagDraft(null)
@@ -188,7 +191,8 @@ function App() {
     setHighlightDialogOpen(false)
     setRedPenReviewDraft('')
     setRedPenDraft('')
-    setRedPenReplacementEnabled(true)
+    setRedPenContentMode('comment')
+    setRedPenProposalMode('none')
     setRedPenTagDraft(null)
     setHighlightCommentDraft('')
     setHighlightTagDraft(null)
@@ -198,7 +202,7 @@ function App() {
     setDraftEditing(false)
     setReviewRound(initialRound())
     setPaneLayout('reviewOnly')
-    setActiveTool('redPen')
+    setActiveTool(INITIAL_REVIEW_TOOL)
     setMobilePane('original')
     setReviewers(initialReviewers())
     setLockDialogOpen(false)
@@ -296,7 +300,7 @@ function App() {
       setPaneLayout(phase === 'reviewing' ? 'reviewOnly' : phase === 'revising' ? 'sideBySide' : 'revisionOnly')
       setSidebarOpen(phase === 'reviewing' || phase === 'revising')
       setDraftEditing(phase === 'polishing')
-      setActiveTool('redPen')
+      setActiveTool(initialToolForPhase(phase))
       setSwapped(false)
       setMobilePane(phase === 'reviewing' ? 'original' : 'draft')
       setActiveAnnotationId(null)
@@ -305,7 +309,8 @@ function App() {
       setHighlightDialogOpen(false)
       setRedPenReviewDraft('')
       setRedPenDraft('')
-      setRedPenReplacementEnabled(true)
+      setRedPenContentMode('comment')
+      setRedPenProposalMode('none')
       setRedPenTagDraft(null)
       setHighlightCommentDraft('')
       setHighlightTagDraft(null)
@@ -536,8 +541,9 @@ function App() {
       },
     })
     setRedPenReviewDraft('')
-    setRedPenDraft(targetText)
-    setRedPenReplacementEnabled(true)
+    setRedPenDraft('')
+    setRedPenContentMode('comment')
+    setRedPenProposalMode('none')
     setRedPenTagDraft(null)
     setHighlightCommentDraft('')
     setHighlightTagDraft(null)
@@ -655,7 +661,7 @@ function App() {
 
   const switchSelectionTool = (nextTool: 'redPen' | 'highlighter') => {
     if (!canAddAnnotations || annotationEditTarget) return
-    const redPenHasInput = dialogOpen && (redPenReviewDraft.trim() !== '' || redPenDraft !== documentSelection?.targetText || !redPenReplacementEnabled || redPenTagDraft !== null)
+    const redPenHasInput = dialogOpen && (redPenReviewDraft.trim() !== '' || redPenDraft !== '' || redPenProposalMode !== 'none' || redPenTagDraft !== null)
     const highlightHasInput = highlightDialogOpen && (highlightCommentDraft.trim() !== '' || highlightTagDraft !== null)
     if ((redPenHasInput || highlightHasInput) && !window.confirm('入力済みの内容は引き継がれません。ペンを持ち替えますか？')) return
 
@@ -663,8 +669,9 @@ function App() {
     setDialogOpen(nextTool === 'redPen' && Boolean(documentSelection))
     setHighlightDialogOpen(nextTool === 'highlighter' && Boolean(documentSelection))
     setRedPenReviewDraft('')
-    setRedPenDraft(documentSelection?.targetText ?? '')
-    setRedPenReplacementEnabled(true)
+    setRedPenDraft('')
+    setRedPenContentMode('comment')
+    setRedPenProposalMode('none')
     setRedPenTagDraft(null)
     setHighlightCommentDraft('')
     setHighlightTagDraft(null)
@@ -874,7 +881,8 @@ function App() {
       setAnnotationEditTarget({ kind: 'red_pen', id: red.id })
       setRedPenReviewDraft(red.reviewText ?? '')
       setRedPenDraft(red.replacementText ?? '')
-      setRedPenReplacementEnabled(red.replacementText !== undefined)
+      setRedPenContentMode(red.reviewText !== undefined ? 'comment' : 'proposal')
+      setRedPenProposalMode(red.replacementText === undefined ? 'none' : red.replacementText === '' ? 'delete' : 'text')
       setRedPenTagDraft(red.tag ?? null)
       setDialogOpen(true)
       setHighlightDialogOpen(false)
@@ -1091,7 +1099,7 @@ function App() {
         </div>
         {showSidebar && <Sidebar annotations={annotations} highlights={highlightAnnotations} activeAnnotationId={activeAnnotationId} onClose={() => setSidebarOpen(false)} onSelectAnnotation={selectAnnotation} onComplete={completeAnnotation} onApplyProposal={applyAnnotationProposal} onEdit={editAnnotation} onReopen={reopenAnnotation} onDeleteRequest={requestAnnotationDelete} phase={reviewRound.phase} />}
       </main>
-      {dialogOpen && annotationDialogSelection && <RedPenDialog mode={annotationEditTarget ? 'edit' : 'create'} selection={annotationDialogSelection} reviewText={redPenReviewDraft} replacementText={redPenDraft} replacementEnabled={redPenReplacementEnabled} tag={redPenTagDraft} onReviewTextChange={setRedPenReviewDraft} onReplacementTextChange={setRedPenDraft} onReplacementEnabledChange={setRedPenReplacementEnabled} onTagChange={setRedPenTagDraft} onSwitchTool={() => switchSelectionTool('highlighter')} onCancel={clearDocumentSelection} onSubmit={addAnnotation} />}
+      {dialogOpen && annotationDialogSelection && <RedPenDialog mode={annotationEditTarget ? 'edit' : 'create'} selection={annotationDialogSelection} reviewText={redPenReviewDraft} replacementText={redPenDraft} contentMode={redPenContentMode} proposalMode={redPenProposalMode} tag={redPenTagDraft} onReviewTextChange={setRedPenReviewDraft} onReplacementTextChange={setRedPenDraft} onContentModeChange={setRedPenContentMode} onProposalModeChange={setRedPenProposalMode} onTagChange={setRedPenTagDraft} onSwitchTool={() => switchSelectionTool('highlighter')} onCancel={clearDocumentSelection} onSubmit={addAnnotation} />}
       {highlightDialogOpen && annotationDialogSelection && <HighlightDialog mode={annotationEditTarget ? 'edit' : 'create'} selection={annotationDialogSelection} comment={highlightCommentDraft} color={highlightColor} tag={highlightTagDraft} onCommentChange={setHighlightCommentDraft} onColorChange={setHighlightColor} onTagChange={setHighlightTagDraft} onSwitchTool={() => switchSelectionTool('redPen')} onCancel={clearDocumentSelection} onSubmit={addHighlightAnnotation} />}
       {pasteDialogOpen && <PasteMarkdownDialog onCancel={() => setPasteDialogOpen(false)} onStart={markdown => startReview(markdown, 'pasted_markdown.md')} />}
       {settingsDialogOpen && <SettingsDialog developerMode={developerMode} canExportAiReview={Boolean(originalMarkdown)} onDeveloperModeChange={changeDeveloperMode} onOpenAiReviewExport={() => { setSettingsDialogOpen(false); setAiReviewExportDialogOpen(true) }} onClose={() => setSettingsDialogOpen(false)} />}

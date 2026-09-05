@@ -12,6 +12,10 @@ assert(ja['common.cancel'] === 'キャンセル' && ja['common.close'] === '閉�
 const internalTagIds = ['question', 'rewrite', 'delete', 'add', 'fact_check', 'note'] as const
 assert(internalTagIds.join(',') === 'question,rewrite,delete,add,fact_check,note', '内部tag IDが変更されています')
 assert(internalTagIds.every(tag => `tag.${tag}` in ja), 'tag表示名の辞書キーが不足しています')
+assert(ja['tag.fact_check'] === '要確認', 'fact_checkの日本語表示が要確認ではありません')
+for (const key of ['redPen.comment', 'redPen.proposal', 'redPen.noProposal', 'redPen.textProposal', 'redPen.deleteProposal', 'badge.hasComment', 'badge.proposal', 'badge.deleteProposal'] as const) {
+  assert(Boolean(ja[key]) && Boolean(en[key]), `${key}のja/en表示が不足しています`)
+}
 assert(Object.keys(en).length < Object.keys(ja).length, 'English辞書が完成扱いになっています')
 
 console.log('i18n foundation tests: PASS')

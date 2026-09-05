@@ -8,20 +8,23 @@ type RedPenDialogProps = {
   mode?: 'create' | 'edit'
   reviewText: string
   replacementText: string
-  replacementEnabled: boolean
+  contentMode: 'comment' | 'proposal'
+  proposalMode: 'none' | 'text' | 'delete'
   tag: ReviewTag | null
   onReviewTextChange: (value: string) => void
   onReplacementTextChange: (value: string) => void
-  onReplacementEnabledChange: (value: boolean) => void
+  onContentModeChange: (value: 'comment' | 'proposal') => void
+  onProposalModeChange: (value: 'none' | 'text' | 'delete') => void
   onTagChange: (value: ReviewTag | null) => void
   onSwitchTool: () => void
   onCancel: () => void
   onSubmit: (reviewText: string | undefined, replacementText: string | undefined, tag: ReviewTag | null) => void
 }
 
-export function RedPenDialog({ selection, mode = 'create', reviewText, replacementText, replacementEnabled, tag, onReviewTextChange, onReplacementTextChange, onReplacementEnabledChange, onTagChange, onSwitchTool, onCancel, onSubmit }: RedPenDialogProps) {
+export function RedPenDialog({ selection, mode = 'create', reviewText, replacementText, contentMode, proposalMode, tag, onReviewTextChange, onReplacementTextChange, onContentModeChange, onProposalModeChange, onTagChange, onSwitchTool, onCancel, onSubmit }: RedPenDialogProps) {
   const reviewRef = useRef<HTMLTextAreaElement>(null)
-  const hasContent = reviewText.trim().length > 0 || replacementEnabled
+  const replacementTextValid = proposalMode !== 'text' || replacementText.length > 0
+  const hasContent = replacementTextValid && (reviewText.trim().length > 0 || proposalMode !== 'none')
   const { t } = useTranslation()
 
   useEffect(() => { reviewRef.current?.focus() }, [])
@@ -29,7 +32,8 @@ export function RedPenDialog({ selection, mode = 'create', reviewText, replaceme
   const submit = (event: FormEvent) => {
     event.preventDefault()
     if (!hasContent) return
-    onSubmit(reviewText.trim() || undefined, replacementEnabled ? replacementText : undefined, tag)
+    const proposal = proposalMode === 'none' ? undefined : proposalMode === 'delete' ? '' : replacementText
+    onSubmit(reviewText.trim() || undefined, proposal, tag)
   }
 
   const handleKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -40,7 +44,7 @@ export function RedPenDialog({ selection, mode = 'create', reviewText, replaceme
 
   return (
     <div className="dialog-backdrop" role="presentation" onMouseDown={event => event.target === event.currentTarget && onCancel()}>
-      <section className="red-pen-dialog" role="dialog" aria-modal="true" aria-labelledby="red-pen-title">
+      <section className="red-pen-dialog attention-dialog" role="dialog" aria-modal="true" aria-labelledby="red-pen-title">
         <div className="dialog-pin" aria-hidden="true" />
         <p className="dialog-kicker">RED PEN</p>
         <h2 id="red-pen-title">{t(mode === 'edit' ? 'redPen.editTitle' : 'redPen.title')}</h2>
@@ -50,18 +54,30 @@ export function RedPenDialog({ selection, mode = 'create', reviewText, replaceme
         </div>}
         <form onSubmit={submit}>
           <label className="dialog-field source-field"><span>{t('review.selectedText')}</span><output tabIndex={0}>{selection.targetText}</output></label>
-          <label className="dialog-field replacement-field">
-            <span>{t('redPen.reviewText')}</span>
-            <textarea ref={reviewRef} rows={3} value={reviewText} onChange={event => onReviewTextChange(event.target.value)} onKeyDown={handleKeyDown} />
-          </label>
-          <label className="replacement-toggle">
-            <input type="checkbox" checked={replacementEnabled} onChange={event => onReplacementEnabledChange(event.target.checked)} />
-            {t('redPen.enableReplacement')}
-          </label>
-          {replacementEnabled && <label className="dialog-field replacement-field">
-            <span>{t('redPen.replacementText')}</span>
-            <textarea rows={4} value={replacementText} onChange={event => onReplacementTextChange(event.target.value)} onKeyDown={handleKeyDown} aria-describedby="replacement-help replacement-shortcuts" />
+          <fieldset className="red-pen-content-picker">
+            <legend>{t('redPen.contentKind')}</legend>
+            <div>
+              <label><input type="radio" name="red-pen-content" checked={contentMode === 'comment'} onChange={() => onContentModeChange('comment')} />{t('redPen.comment')}</label>
+              <label><input type="radio" name="red-pen-content" checked={contentMode === 'proposal'} onChange={() => onContentModeChange('proposal')} />{t('redPen.proposal')}</label>
+            </div>
+          </fieldset>
+          {contentMode === 'proposal' && <fieldset className="red-pen-proposal-picker">
+            <legend>{t('redPen.proposalKind')}</legend>
+            <div>
+              <label><input type="radio" name="red-pen-proposal" checked={proposalMode === 'text'} onChange={() => onProposalModeChange('text')} />{t('redPen.textProposal')}</label>
+              <label><input type="radio" name="red-pen-proposal" checked={proposalMode === 'delete'} onChange={() => onProposalModeChange('delete')} />{t('redPen.deleteProposal')}</label>
+              <label><input type="radio" name="red-pen-proposal" checked={proposalMode === 'none'} onChange={() => onProposalModeChange('none')} />{t('redPen.noProposal')}</label>
+            </div>
+          </fieldset>}
+          {contentMode === 'comment' && <label className="dialog-field replacement-field">
+            <span>{t('redPen.comment')}</span>
+            <textarea ref={reviewRef} rows={4} value={reviewText} onChange={event => onReviewTextChange(event.target.value)} onKeyDown={handleKeyDown} aria-describedby="replacement-help replacement-shortcuts" />
           </label>}
+          {contentMode === 'proposal' && proposalMode === 'text' && <label className="dialog-field replacement-field">
+            <span>{t('redPen.proposal')}</span>
+            <textarea ref={reviewRef} rows={4} value={replacementText} onChange={event => onReplacementTextChange(event.target.value)} onKeyDown={handleKeyDown} aria-describedby="replacement-help replacement-shortcuts" />
+          </label>}
+          {contentMode === 'proposal' && proposalMode === 'delete' && <p className="delete-proposal-note">{t('redPen.deleteProposalHelp')}</p>}
           <ReviewTagPicker value={tag} onChange={onTagChange} />
           <p id="replacement-help" className="dialog-help">{t('redPen.help')}</p>
           <p id="replacement-shortcuts" className="dialog-help shortcut-help">{t(mode === 'edit' ? 'review.editShortcuts' : 'review.shortcuts')}</p>

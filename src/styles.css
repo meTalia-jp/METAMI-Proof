@@ -129,9 +129,12 @@ button:focus-visible { outline: 3px solid rgba(40, 90, 145, .3); outline-offset:
 .highlight-annotation.highlight-yellow { background: rgba(255,226,35,.72); box-shadow: inset 0 -2px 0 rgba(201,153,0,.24); }
 .highlight-annotation.highlight-green { background: rgba(126,214,116,.62); box-shadow: inset 0 -2px 0 rgba(53,139,69,.24); }
 .highlight-annotation.is-active { outline: 2px solid rgba(187,135,0,.55); outline-offset: 1px; }
-.highlight-comment-marker { display: inline-block; margin: 0 .18em 0 .3em; padding: 0; color: #755d13; background: transparent; border: 0; font-family: "Segoe UI Emoji", "Yu Gothic", sans-serif; font-size: 20px; line-height: 1; vertical-align: -.08em; cursor: pointer; white-space: nowrap; transition: transform .15s, filter .15s; }
-.highlight-comment-marker:hover, .highlight-comment-marker:focus-visible { filter: saturate(1.25) brightness(.92); transform: scale(1.12); outline: none; }
-.highlight-comment-marker.is-active { filter: drop-shadow(0 0 2px rgba(128,90,0,.7)); transform: scale(1.1); }
+.attention-badge { display: inline-block; margin: 0 .12em 0 .32em; padding: .12em .48em; border: 1px solid #aaa08f; border-radius: 999px; color: #574f44; background: #f5f0e5; font-size: 10px; font-weight: 700; line-height: 1.45; vertical-align: .12em; cursor: pointer; white-space: nowrap; transition: border-color .15s, box-shadow .15s, transform .15s; }
+.attention-badge-comment { color: #465a68; border-color: #9babb4; background: #edf2f4; }
+.attention-badge-proposal { color: #962e2a; border-color: #d39b96; background: #fff0ed; }
+.attention-badge-deletion { color: #fff; border-color: #a92c28; background: #bd3732; }
+.attention-badge:hover, .attention-badge:focus-visible { border-color: #655d51; box-shadow: 0 0 0 2px rgba(78,70,58,.13); outline: none; transform: translateY(-1px); }
+.attention-badge.is-active { box-shadow: 0 0 0 2px rgba(46,101,158,.22); }
 .highlight-comment-popover { position: fixed; z-index: 60; width: min(280px, calc(100vw - 24px)); padding: 12px 14px; color: #403a2c; background: #fffdf4; border: 1px solid #d6b94f; border-radius: 7px; box-shadow: 0 8px 24px rgba(49,42,25,.2); overflow-wrap: anywhere; }
 .highlight-comment-popover p { margin: 0 0 8px; font-size: 13px; line-height: 1.65; white-space: pre-wrap; }
 .highlight-comment-popover span { display: block; color: #756c59; font-size: 10px; font-weight: 700; }
@@ -186,6 +189,26 @@ button:focus-visible { outline: 3px solid rgba(40, 90, 145, .3); outline-offset:
 .red-pen-dialog output { display: block; min-height: 82px; max-height: 180px; overflow-y: auto; color: #403d36; background: #f3f1eb; text-decoration: none; }
 .red-pen-dialog textarea { min-height: 132px; max-height: 320px; resize: vertical; background: #fff; border-color: #c9837e; box-shadow: inset 3px 0 0 var(--shu); }
 .red-pen-dialog textarea:focus { outline: 3px solid rgba(187,48,45,.12); border-color: var(--shu); }
+.attention-dialog { padding: 22px 28px 18px; }
+.attention-dialog h2 { margin-bottom: 12px; }
+.attention-dialog .dialog-tool-switch { margin-bottom: 10px; }
+.attention-dialog .source-field { margin-bottom: 10px; }
+.attention-dialog .source-field output { min-height: 0; max-height: calc(1.6em * 3 + 18px); padding: 8px 12px; line-height: 1.6; }
+.attention-dialog textarea { min-height: 92px; max-height: 220px; padding: 10px 12px; line-height: 1.6; }
+.attention-dialog .red-pen-content-picker,
+.attention-dialog .red-pen-proposal-picker { margin-bottom: 10px; }
+.attention-dialog .replacement-field { margin-bottom: 10px; }
+.attention-dialog .review-tag-picker { margin-bottom: 11px; }
+.attention-dialog .dialog-help { margin-bottom: 12px; }
+.attention-dialog .shortcut-help { margin-top: -7px; }
+.attention-dialog .dialog-actions { position: sticky; z-index: 2; bottom: -18px; margin: 0 -28px -18px; padding: 10px 28px 18px; border-top: 1px solid rgba(216,205,185,.7); background: linear-gradient(to bottom, rgba(252,250,244,.96), var(--paper) 35%); }
+.red-pen-content-picker, .red-pen-proposal-picker { margin: 0 0 14px; padding: 0; border: 0; }
+.red-pen-content-picker legend, .red-pen-proposal-picker legend { margin-bottom: 7px; color: #625d54; font-size: 11px; font-weight: 700; }
+.red-pen-content-picker > div, .red-pen-proposal-picker > div { display: flex; flex-wrap: wrap; gap: 7px; }
+.red-pen-content-picker label, .red-pen-proposal-picker label { display: inline-flex; align-items: center; gap: 6px; min-height: 32px; margin: 0; padding: 5px 11px; border: 1px solid #cfc5b5; border-radius: 999px; background: #fffdf8; cursor: pointer; }
+.red-pen-content-picker label:has(input:checked), .red-pen-proposal-picker label:has(input:checked) { color: #7d2b28; border-color: #bd6c67; background: #fff1ee; box-shadow: 0 0 0 2px rgba(169,74,68,.1); }
+.red-pen-content-picker input, .red-pen-proposal-picker input { margin: 0; accent-color: var(--shu); }
+.delete-proposal-note { margin: 0 0 15px; padding: 11px 13px; color: #852d29; background: #fff0ed; border-left: 3px solid var(--shu); font-size: 12px; }
 .paste-markdown-dialog { width: min(820px, 100%); }
 .paste-markdown-dialog textarea { min-height: 360px; max-height: calc(100vh - 280px); font-family: Consolas, "Yu Gothic", monospace; font-size: 13px; }
 .settings-dialog { position: relative; width: min(560px, 100%); max-height: calc(100vh - 40px); overflow-y: auto; padding: 28px 32px 26px; border: 1px solid #d8cdb9; border-top: 4px solid #686158; border-radius: 4px; background: var(--paper); box-shadow: 0 18px 55px rgba(44,35,25,.24); }
@@ -241,6 +264,7 @@ button:focus-visible { outline: 3px solid rgba(40, 90, 145, .3); outline-offset:
 .highlight-kicker { color: #80630b; }
 .highlight-dialog textarea { border-color: #d8bd52; box-shadow: inset 3px 0 0 #e0ba25; }
 .highlight-dialog textarea:focus { outline-color: rgba(224,186,37,.18); border-color: #b7920e; }
+.highlight-dialog .highlight-color-picker { margin: 8px 0; }
 .highlight-action { border: 1px solid #a27d08; color: #403208; background: #f4d35e; font-weight: 700; }
 .dialog-tool-switch { display: inline-flex; gap: 4px; margin: 0 0 14px; padding: 3px; border: 1px solid #d8cdb9; border-radius: 6px; background: #f7f2e8; }
 .dialog-tool-switch button { min-height: 29px; padding: 4px 12px; border: 1px solid transparent; border-radius: 4px; color: #70695d; background: transparent; cursor: pointer; font: inherit; font-size: 11px; }

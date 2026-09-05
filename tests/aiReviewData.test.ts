@@ -31,6 +31,8 @@ const results = (['consult', 'revise'] as const).map(mode => {
   assert(result.instructions.reviewRule.includes('When a tag is present') && result.instructions.reviewRule.includes('When no tag is present'), `${mode}のreviewRuleにtagあり・なしの扱いがありません`)
   assert(result.instructions.reviewRule.includes('tagSemantics') && result.instructions.reviewRule.includes('reviewText') && result.instructions.reviewRule.includes('context'), `${mode}のreviewRuleに意図判断の情報源がありません`)
   assert(result.instructions.proposalRule.startsWith('When replacementText is present'), `${mode}のproposalRuleがreplacementText存在時の規則になっていません`)
+  assert(result.instructions.proposalRule.includes('exact replacement text proposed by the human'), `${mode}のproposalRuleに具体的な本文候補の説明がありません`)
+  assert(result.instructions.proposalRule.includes('empty replacementText') && result.instructions.proposalRule.includes('delete the target text'), `${mode}のproposalRuleに削除案の説明がありません`)
   assert(result.reviewItems.length === 3, 'tagなしannotationを含む全件が出力されません')
   assert(result.reviewItems[0].reviewText === '確認してください', 'red_pen reviewTextがありません')
   assert(result.reviewItems[1].tag === 'delete', 'reviewItemsのtagが保持されていません')
@@ -45,5 +47,6 @@ const results = (['consult', 'revise'] as const).map(mode => {
 })
 
 assert(JSON.stringify(results[0].tagSemantics) === JSON.stringify(results[1].tagSemantics), 'consultとreviseでtagSemanticsが異なります')
+assert(results[1].instructions.proposalRule.includes('better alternative'), 'reviseの代案許可が失われています')
 
 console.log('AI review TYPE-B v0.1 tests: PASS')

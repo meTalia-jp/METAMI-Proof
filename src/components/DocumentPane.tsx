@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type MouseEvent } from 'react'
+import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent } from 'react'
 import { MarkdownViewer } from './MarkdownViewer'
 import type { DocumentSelection, HighlightAnnotation, RedPenAnnotation } from '../types/annotation'
 
@@ -90,8 +90,8 @@ export function DocumentPane({ kind, markdown, fileName, annotations, highlights
     }
   }, [commentPopover, highlights])
 
-  const selectAnnotation = (event: MouseEvent<HTMLElement>) => {
-    const annotationElement = (event.target as HTMLElement).closest<HTMLElement>('[data-annotation-id]')
+  const activateAnnotation = (target: HTMLElement) => {
+    const annotationElement = target.closest<HTMLElement>('[data-annotation-id]')
     const annotationId = annotationElement?.dataset.annotationId
     if (!annotationId) return
     if (eraserActive) {
@@ -106,7 +106,7 @@ export function DocumentPane({ kind, markdown, fileName, annotations, highlights
       return
     }
 
-    const marker = (event.target as HTMLElement).closest<HTMLElement>('.highlight-comment-marker')
+    const marker = target.closest<HTMLElement>('.attention-badge[data-review-type="highlight"]')
     const highlight = marker ? highlights.find(item => item.id === annotationId && item.comment) : undefined
     if (!marker || !highlight?.comment) return
     if (commentPopover?.annotationId === annotationId) {
@@ -126,6 +126,16 @@ export function DocumentPane({ kind, markdown, fileName, annotations, highlights
       ? rect.bottom + gap
       : Math.max(edgeGap, rect.top - estimatedHeight - gap)
     setCommentPopover({ annotationId, comment: highlight.comment, reviewer: highlight.reviewer.name, top, left })
+  }
+
+  const selectAnnotation = (event: MouseEvent<HTMLElement>) => activateAnnotation(event.target as HTMLElement)
+
+  const selectAnnotationByKeyboard = (event: ReactKeyboardEvent<HTMLElement>) => {
+    if (event.key !== 'Enter' && event.key !== ' ') return
+    const target = event.target as HTMLElement
+    if (!target.closest<HTMLElement>('[data-annotation-id][role="button"]')) return
+    event.preventDefault()
+    activateAnnotation(target)
   }
 
   return (
@@ -154,7 +164,7 @@ export function DocumentPane({ kind, markdown, fileName, annotations, highlights
         </div>
       ) : (
         <>
-          <article className={`markdown-body ${eraserActive ? 'eraser-mode' : ''}`} onMouseUp={isOriginal && !eraserActive ? onOriginalSelection : undefined} onClick={selectAnnotation}>
+          <article className={`markdown-body ${eraserActive ? 'eraser-mode' : ''}`} onMouseUp={isOriginal && !eraserActive ? onOriginalSelection : undefined} onClick={selectAnnotation} onKeyDown={selectAnnotationByKeyboard}>
             <MarkdownViewer markdown={markdown} annotations={annotations} highlights={highlights} selection={isOriginal ? documentSelection : null} activeAnnotationId={activeAnnotationId} mode={kind} />
           </article>
           {commentPopover && (

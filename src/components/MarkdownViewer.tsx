@@ -1,6 +1,8 @@
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import type { DocumentSelection, HighlightAnnotation, RedPenAnnotation } from '../types/annotation'
+import { translate } from '../i18n'
+import { getAttentionBadges, type AttentionBadge } from '../utils/attentionBadges'
 
 type MarkdownViewerProps = {
   markdown: string
@@ -122,7 +124,7 @@ function createSourcePositionPlugin(markdown: string, annotations: RedPenAnnotat
     ]
     const firstRecord = new Map<string, HastNode>()
     const lastRecord = new Map<string, HastNode>()
-    const emittedHighlightMarkers = new Set<string>()
+    const emittedAttentionBadges = new Set<string>()
     for (const range of activeRanges) {
       const overlapping = records.filter(record => record.sourceStart < range.anchor.sourceEnd && record.sourceEnd > range.anchor.sourceStart)
       if (overlapping.length) {
@@ -131,18 +133,35 @@ function createSourcePositionPlugin(markdown: string, annotations: RedPenAnnotat
       }
     }
 
-    const highlightCommentMarker = (range: { id: string; anchor: HighlightAnnotation }) => elementNode('span', {
-      className: ['highlight-comment-marker', ...(activeAnnotationId === range.id ? ['is-active'] : [])],
-      'data-annotation-id': range.id,
-      'data-review-id': range.id,
-      'data-review-type': 'highlight',
-      'data-comment': range.anchor.comment ?? '',
-      'data-reviewer': range.anchor.reviewer.name,
-      'aria-label': `蛍光コメント：${range.anchor.comment}`,
-      title: range.anchor.comment ?? undefined,
-      role: 'button',
-      tabIndex: 0,
-    }, [textNode('💬')])
+    const badgeText = (badge: AttentionBadge) => {
+      if (badge.label === 'has_comment') return translate('badge.hasComment')
+      if (badge.label === 'proposal') return translate('badge.proposal')
+      if (badge.label === 'deletion_proposal') return translate('badge.deleteProposal')
+      const tagKeys = {
+        question: 'tag.question', rewrite: 'tag.rewrite', delete: 'tag.delete',
+        add: 'tag.add', fact_check: 'tag.fact_check', note: 'tag.note',
+      } as const
+      return translate(tagKeys[badge.label])
+    }
+    const badgeTitle = (badge: AttentionBadge, annotation: RedPenAnnotation | HighlightAnnotation) => {
+      if (annotation.type === 'highlight') return annotation.comment ?? badgeText(badge)
+      if (badge.kind === 'proposal') return annotation.replacementText ?? badgeText(badge)
+      if (badge.kind === 'deletion') return translate('badge.deleteProposal')
+      return annotation.reviewText ?? annotation.replacementText ?? badgeText(badge)
+    }
+    const attentionBadgeNodes = (range: { id: string; anchor: RedPenAnnotation | HighlightAnnotation }) =>
+      getAttentionBadges(range.anchor).map(badge => elementNode('span', {
+        className: ['attention-badge', `attention-badge-${badge.kind}`, ...(activeAnnotationId === range.id ? ['is-active'] : [])],
+        'data-annotation-id': range.id,
+        'data-review-id': range.id,
+        'data-review-type': range.anchor.type === 'highlight' ? 'highlight' : 'correction',
+        'data-comment': range.anchor.type === 'highlight' ? range.anchor.comment ?? '' : range.anchor.reviewText ?? '',
+        'data-reviewer': range.anchor.reviewer?.name ?? '',
+        'aria-label': badgeText(badge),
+        title: badgeTitle(badge, range.anchor),
+        role: 'button',
+        tabIndex: 0,
+      }, [textNode(`[${badgeText(badge)}]`)]))
 
     const transform = (node: HastNode) => {
       if (!node.children) return
@@ -185,18 +204,20 @@ function createSourcePositionPlugin(markdown: string, annotations: RedPenAnnotat
               'data-source-end': partEnd,
               'aria-label': range.anchor.comment ? `蛍光コメント：${range.anchor.comment}` : `${range.anchor.color === 'green' ? '緑' : '黄色'}蛍光`,
               title: range.anchor.comment ?? undefined,
+              role: 'button',
+              tabIndex: 0,
             }, [textNode(visiblePart)]))
-            if (lastRecord.get(range.id) === child && range.anchor.comment) {
-              result.push(highlightCommentMarker(range))
-              emittedHighlightMarkers.add(range.id)
+            if (lastRecord.get(range.id) === child && getAttentionBadges(range.anchor).length) {
+              result.push(...attentionBadgeNodes(range))
+              emittedAttentionBadges.add(range.id)
             }
           } else if (mode === 'original') {
             const completed = range.anchor.status !== 'pending'
             const reviewProperties = { 'data-review-id': range.id, 'data-review-type': 'correction' }
             const children = [elementNode('span', { className: ['del'], ...reviewProperties }, [textNode(visiblePart)])]
             if (lastRecord.get(range.id) === child) {
-              const proposal = range.anchor.replacementText ?? range.anchor.reviewText ?? ''
-              children.push(elementNode('span', { className: ['ins'], 'aria-label': `レビュー：${proposal}`, ...reviewProperties }, [textNode(proposal)]))
+              if (range.anchor.replacementText) children.push(elementNode('span', { className: ['ins'], 'aria-label': `本文案：${range.anchor.replacementText}`, ...reviewProperties }, [textNode(range.anchor.replacementText)]))
+              children.push(...attentionBadgeNodes(range))
               if (completed) children.push(elementNode('span', { className: ['annotation-complete-mark'], 'aria-label': '確認完了' }, [textNode('✓')]))
             }
             result.push(elementNode('span', {
@@ -222,9 +243,9 @@ function createSourcePositionPlugin(markdown: string, annotations: RedPenAnnotat
         }
         if (cursor < record.sourceEnd) result.push(sourceSpan(child.value.slice(cursor - record.sourceStart), cursor, record.sourceEnd))
         for (const highlight of highlights) {
-          if (highlight.comment && lastRecord.get(highlight.id) === child && !emittedHighlightMarkers.has(highlight.id)) {
-            result.push(highlightCommentMarker({ id: highlight.id, anchor: highlight }))
-            emittedHighlightMarkers.add(highlight.id)
+          if (getAttentionBadges(highlight).length && lastRecord.get(highlight.id) === child && !emittedAttentionBadges.has(highlight.id)) {
+            result.push(...attentionBadgeNodes({ id: highlight.id, anchor: highlight }))
+            emittedAttentionBadges.add(highlight.id)
           }
         }
         return result
