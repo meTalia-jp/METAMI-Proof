@@ -12,6 +12,7 @@ import { AnnotationDeleteDialog } from './components/AnnotationDeleteDialog'
 import { PasteMarkdownDialog } from './components/PasteMarkdownDialog'
 import { SettingsDialog } from './components/SettingsDialog'
 import { AiReviewExportDialog } from './components/AiReviewExportDialog'
+import { RoundCompletionDialog } from './components/RoundCompletionDialog'
 import type { AiReviewMode } from './types/aiReview'
 import type { DocumentSelection, HighlightAnnotation, HighlightColor, RedPenAnnotation, ReviewTag } from './types/annotation'
 import type { ExportOriginalAnchor } from './types/portableReview'
@@ -26,10 +27,10 @@ import { INITIAL_REVIEW_TOOL, initialToolForPhase } from './config/reviewTools'
 import { convertReviewExportDataToAiReview } from './utils/aiReview'
 import { updateRedPenContent, updateHighlightContent } from './utils/annotationContent'
 import { setLocale, translate, useTranslation } from './i18n'
+import { canConfirmRoundSave, completedReviewRound, createNextRoundWorkspace, reviewRoundArchiveFileName, saveRoundReviewHtml, type SaveFilePicker } from './utils/roundWorkflow'
 
 type MobilePane = 'original' | 'draft'
-type StructureAfterAction = 'stay' | 'preview' | 'export' | 'apply-proposal'
-
+type StructureAfterAction = 'stay' | 'preview' | 'export' | 'complete-round' | 'apply-proposal'
 const initialRound = (): ReviewRound => ({ id: 'round_001', number: 1, phase: 'reviewing', lockedAt: null })
 const initialLocale = readLocaleSetting()
 setLocale(initialLocale)
@@ -114,6 +115,10 @@ function App() {
   const [locale, setAppLocale] = useState<AppLocale>(initialLocale)
   useEffect(() => { document.documentElement.lang = locale }, [locale])
   const [aiReviewExportDialogOpen, setAiReviewExportDialogOpen] = useState(false)
+  const [completedReviewLoadedFromHtml, setCompletedReviewLoadedFromHtml] = useState(false)
+  const [roundCompletionDialogOpen, setRoundCompletionDialogOpen] = useState(false)
+  const [roundCompletionSaving, setRoundCompletionSaving] = useState(false)
+  const [roundCompletionError, setRoundCompletionError] = useState('')
   const fileInputRef = useRef<HTMLInputElement>(null)
   const workDataInputRef = useRef<HTMLInputElement>(null)
   const reanchorTimerRef = useRef<number | null>(null)
@@ -220,6 +225,7 @@ function App() {
     setActiveAnnotationId(null)
     setDraftEditing(false)
     setReviewRound(initialRound())
+    setCompletedReviewLoadedFromHtml(false)
     setPaneLayout('reviewOnly')
     setActiveTool(INITIAL_REVIEW_TOOL)
     setMobilePane('original')
@@ -254,7 +260,8 @@ function App() {
     try {
       const fileText = await file.text()
       let parsed: unknown
-      if (/\.html?$/i.test(file.name) || file.type === 'text/html') {
+      const isReviewHtml = /\.html?$/i.test(file.name) || file.type === 'text/html'
+      if (isReviewHtml) {
         const extracted = extractReviewJsonFromHtml(fileText)
         if (!extracted.ok) {
           setNotice(extracted.error)
@@ -315,6 +322,7 @@ function App() {
       })}))
       setReviewers(data.reviewers)
       setReviewRound(restoredRound)
+      setCompletedReviewLoadedFromHtml(isReviewHtml && restoredRound.phase === 'completed')
       setEditingDraftMarkdown(data.document.draftMarkdown)
       setPaneLayout(phase === 'reviewing' ? 'reviewOnly' : phase === 'revising' ? 'sideBySide' : 'revisionOnly')
       setSidebarOpen(phase === 'reviewing' || phase === 'revising')
@@ -397,11 +405,7 @@ function App() {
     }
   }
 
-  const reviewHtmlFileName = (() => {
-    const baseName = fileName.replace(/\.md$/i, '') || 'metami-proof'
-    const roundNumber = String(reviewRound.number).padStart(3, '0')
-    return `${baseName}_round${roundNumber}_review.html`
-  })()
+  const reviewHtmlFileName = reviewRoundArchiveFileName(fileName, reviewRound.number)
 
   const exportReviewHtml = () => {
     if (!originalMarkdown) return
@@ -436,6 +440,87 @@ function App() {
       setNotice(t('notice.htmlSaveFailed'))
     } finally {
       if (objectUrl) window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1000)
+    }
+  }
+
+  const initializeNextRound = (transition: 'saved' | 'download-started' | 'reopened' = 'saved', sourceRound: ReviewRound = reviewRound) => {
+    const completedRoundNumber = reviewRound.number
+    const nextWorkspace = createNextRoundWorkspace(sourceRound, draftMarkdown, reviewers)
+    setOriginalMarkdown(nextWorkspace.originalMarkdown)
+    setDraftMarkdown(nextWorkspace.draftMarkdown)
+    setAnnotations(nextWorkspace.annotations)
+    setHighlightAnnotations(nextWorkspace.highlights)
+    setReviewers(nextWorkspace.reviewers)
+    setReviewRound(nextWorkspace.round)
+    setCompletedReviewLoadedFromHtml(false)
+    setDocumentSelection(null)
+    setDialogOpen(false)
+    setHighlightDialogOpen(false)
+    setAnnotationEditTarget(null)
+    setRedPenReviewDraft('')
+    setRedPenDraft('')
+    setRedPenContentMode('comment')
+    setRedPenProposalMode('none')
+    setRedPenTagDraft(null)
+    setHighlightCommentDraft('')
+    setHighlightTagDraft(null)
+    setHighlightColor('yellow')
+    setActiveAnnotationId(null)
+    setDraftEditing(false)
+    setEditingDraftMarkdown(nextWorkspace.draftMarkdown)
+    setPaneLayout('reviewOnly')
+    setSidebarOpen(true)
+    setActiveTool(INITIAL_REVIEW_TOOL)
+    setMobilePane('original')
+    setSwapped(false)
+    setLockDialogOpen(false)
+    setStructureChanges([])
+    setStructureDialogOpen(false)
+    setPolishingDialogOpen(false)
+    setExportDialogOpen(false)
+    setExporting(false)
+    setExportError('')
+    setStructureAfterAction('stay')
+    setPendingProposalId(null)
+    setEditSelection(null)
+    setEditingAnnotationId(null)
+    setDeleteTarget(null)
+    setRoundCompletionDialogOpen(false)
+    setRoundCompletionError('')
+    lastWarnedEditingRef.current = ''
+    window.getSelection()?.removeAllRanges()
+    const noticeKey = transition === 'saved' ? 'roundStart.saved' : transition === 'download-started' ? 'roundStart.downloadStarted' : 'roundStart.reopened'
+    setNotice(t(noticeKey, { current: completedRoundNumber, next: nextWorkspace.round.number }))
+  }
+
+  const completeRoundWithArchive = async (action: 'finish' | 'next') => {
+    if (reviewRound.phase !== 'polishing' || roundCompletionSaving) return
+    const picker = (window as Window & { showSaveFilePicker?: SaveFilePicker }).showSaveFilePicker?.bind(window)
+    setRoundCompletionSaving(true)
+    setRoundCompletionError('')
+    try {
+      const completedRound = completedReviewRound(reviewRound)
+      const data = buildReviewExportData({ sourceFileName: fileName, originalMarkdown, draftMarkdown, reviewRound: completedRound, reviewers, corrections: annotations, highlights: highlightAnnotations })
+      const validated = validateReviewExportData(data)
+      if (!validated.ok) throw new Error(validated.error)
+      const result = await saveRoundReviewHtml(picker, new Blob([renderReviewHtml(data, theme, locale)], { type: 'text/html;charset=utf-8' }), reviewHtmlFileName)
+      if (result === 'cancelled') { setRoundCompletionDialogOpen(false); return }
+      setRoundCompletionDialogOpen(false)
+      if (action === 'next') initializeNextRound(result, completedRound)
+      else {
+        setReviewRound(completedRound)
+        setCompletedReviewLoadedFromHtml(false)
+        setDraftEditing(false)
+        setPaneLayout('revisionOnly')
+        setSidebarOpen(false)
+        setActiveAnnotationId(null)
+        setEditingDraftMarkdown(draftMarkdown)
+        setNotice(t(result === 'saved' ? 'roundComplete.finished' : 'roundComplete.downloadStarted', { current: reviewRound.number }))
+      }
+    } catch {
+      setRoundCompletionError(t('roundStart.saveFailed'))
+    } finally {
+      setRoundCompletionSaving(false)
     }
   }
 
@@ -777,6 +862,7 @@ function App() {
     } else if (reviewRound.phase === 'polishing') {
       if (structureAfterAction === 'preview') setDraftEditing(false)
       if (structureAfterAction === 'export') setExportDialogOpen(true)
+      if (structureAfterAction === 'complete-round') setRoundCompletionDialogOpen(true)
       setStructureAfterAction('stay')
     } else setDraftEditing(false)
   }
@@ -820,6 +906,24 @@ function App() {
     setAnnotations(current => updateResolvedDraftAnchors(draftMarkdown, editingDraftMarkdown, current))
     setDraftMarkdown(editingDraftMarkdown)
     setDraftEditing(false)
+  }
+
+  const requestRoundCompletion = () => {
+    if (reviewRound.phase !== 'polishing') return
+    const changes = detectMarkdownStructureChanges(draftMarkdown, editingDraftMarkdown)
+    if (draftEditing && changes.length) {
+      lastWarnedEditingRef.current = editingDraftMarkdown
+      setStructureChanges(changes)
+      setStructureAfterAction('complete-round')
+      setStructureDialogOpen(true)
+      return
+    }
+    if (draftEditing && editingDraftMarkdown !== draftMarkdown) {
+      setAnnotations(current => updateResolvedDraftAnchors(draftMarkdown, editingDraftMarkdown, current))
+      setDraftMarkdown(editingDraftMarkdown)
+    }
+    setRoundCompletionError('')
+    setRoundCompletionDialogOpen(true)
   }
 
   useEffect(() => {
@@ -1065,11 +1169,7 @@ function App() {
       anchor.click()
       anchor.remove()
       setExportDialogOpen(false)
-      setReviewRound(current => ({ ...current, phase: 'completed' }))
-      setDraftEditing(false)
-      setPaneLayout('revisionOnly')
-      setSidebarOpen(false)
-      setNotice(t('notice.markdownCompleted'))
+      setNotice(t('notice.markdownSaved', { fileName: completedFileName }))
     } catch {
       setExportError(t('notice.markdownExportFailed'))
     } finally {
@@ -1105,7 +1205,7 @@ function App() {
       <input ref={fileInputRef} className="visually-hidden" type="file" accept=".md,text/markdown,text/plain" onChange={loadMarkdown} />
       <input ref={workDataInputRef} className="visually-hidden" type="file" accept=".json,.html,application/json,text/html" onChange={loadWorkData} />
       <div className="sticky-header-stack">
-        <Header onOpenFile={() => fileInputRef.current?.click()} onPasteMarkdown={() => setPasteDialogOpen(true)} onOpenWorkData={() => workDataInputRef.current?.click()} onExportWorkData={exportWorkData} canExportWorkData={Boolean(originalMarkdown)} onExportMarkdown={requestPolishingCompletion} canExportMarkdown={reviewRound.phase === 'polishing' && !structureDialogOpen} onExportReviewHtml={exportReviewHtml} canExportReviewHtml={Boolean(originalMarkdown)} onSwap={() => paneLayout === 'sideBySide' && setSwapped(value => !value)} onToggleSidebar={() => setSidebarOpen(value => !value)} activeTool={activeTool} onToolChange={changeActiveTool} paneLayout={paneLayout} onPaneLayoutChange={setPaneLayout} sidebarOpen={showSidebar} canSelectTools={canAddAnnotations} annotationCount={annotations.length} pendingCount={pendingAnnotations.length} onPreviousPending={() => movePending(-1)} onNextPending={() => movePending(1)} phase={reviewRound.phase} reviewerCompletedCount={reviewers.filter(reviewer => reviewer.status === 'completed').length} reviewerCount={reviewers.length} onCompleteReview={completeCurrentReview} canStartPolishing={reviewRound.phase === 'revising' && pendingAnnotations.length === 0} onStartPolishing={() => setPolishingDialogOpen(true)} onOpenSettings={() => setSettingsDialogOpen(true)} />
+        <Header onOpenFile={() => fileInputRef.current?.click()} onPasteMarkdown={() => setPasteDialogOpen(true)} onOpenWorkData={() => workDataInputRef.current?.click()} onExportWorkData={exportWorkData} canExportWorkData={Boolean(originalMarkdown)} onExportMarkdown={requestPolishingCompletion} canExportMarkdown={reviewRound.phase === 'polishing' && !structureDialogOpen} onExportReviewHtml={exportReviewHtml} canExportReviewHtml={Boolean(originalMarkdown)} onSwap={() => paneLayout === 'sideBySide' && setSwapped(value => !value)} onToggleSidebar={() => setSidebarOpen(value => !value)} activeTool={activeTool} onToolChange={changeActiveTool} paneLayout={paneLayout} onPaneLayoutChange={setPaneLayout} sidebarOpen={showSidebar} canSelectTools={canAddAnnotations} annotationCount={annotations.length} pendingCount={pendingAnnotations.length} onPreviousPending={() => movePending(-1)} onNextPending={() => movePending(1)} phase={reviewRound.phase} reviewerCompletedCount={reviewers.filter(reviewer => reviewer.status === 'completed').length} reviewerCount={reviewers.length} onCompleteReview={completeCurrentReview} canStartPolishing={reviewRound.phase === 'revising' && pendingAnnotations.length === 0} onStartPolishing={(() => setPolishingDialogOpen(true))} onCompleteRound={requestRoundCompletion} currentRoundNumber={reviewRound.number} canReviewAgain={completedReviewLoadedFromHtml} onReviewAgain={() => { if (reviewRound.phase === 'completed' && completedReviewLoadedFromHtml) initializeNextRound('reopened', reviewRound) }} onOpenSettings={() => setSettingsDialogOpen(true)} />
         {notice && <div className={`selection-notice ${documentSelection ? 'ready' : ''} ${notice === t('reviewHtml.formatError') ? 'floating-format-error' : ''}`} role={notice === t('reviewHtml.formatError') ? 'alert' : 'status'}><span>{notice}</span><button className="notice-close" type="button" onClick={clearDocumentSelection} aria-label={t('notice.noticeCloseAria')}>×</button></div>}
       </div>
       {paneLayout === 'sideBySide' && <div className="mobile-tabs" role="tablist" aria-label={t('mobileTabs.aria')}>
@@ -1126,7 +1226,8 @@ function App() {
       {lockDialogOpen && <ReviewLockDialog onCancel={() => setLockDialogOpen(false)} onConfirm={confirmReviewLock} />}
       {structureDialogOpen && <MarkdownStructureDialog changes={structureChanges} onBack={returnToStructureEditing} onApply={commitDraftEditing} applyLabel={isPolishing ? t('structure.applyChange') : t('structure.apply')} />}
       {polishingDialogOpen && <PolishingConfirmDialog onCancel={() => setPolishingDialogOpen(false)} onConfirm={enterPolishing} />}
-      {exportDialogOpen && <MarkdownExportDialog fileName={completedFileName} exporting={exporting} error={exportError} onBack={() => { setExportDialogOpen(false); setExportError('') }} onExport={exportCompletedMarkdown} />}
+      {exportDialogOpen && <MarkdownExportDialog fileName={completedFileName} roundNumber={reviewRound.number} exporting={exporting} error={exportError} onBack={() => { setExportDialogOpen(false); setExportError('') }} onExport={exportCompletedMarkdown} />}
+      {roundCompletionDialogOpen && reviewRound.phase === 'polishing' && <RoundCompletionDialog currentRound={reviewRound.number} nextRound={reviewRound.number + 1} fileName={reviewHtmlFileName} saving={roundCompletionSaving} error={roundCompletionError} saveCanBeConfirmed={canConfirmRoundSave((window as Window & { showSaveFilePicker?: SaveFilePicker }).showSaveFilePicker)} onCancel={() => { if (!roundCompletionSaving) { setRoundCompletionDialogOpen(false); setRoundCompletionError('') } }} onFinish={() => completeRoundWithArchive('finish')} onStartNext={() => completeRoundWithArchive('next')} />}
       {deleteTarget && (() => {
         const annotation = deleteTarget.kind === 'red_pen'
           ? annotations.find(item => item.id === deleteTarget.id)

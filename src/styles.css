@@ -286,6 +286,27 @@ button:focus-visible { outline: 3px solid rgba(40, 90, 145, .3); outline-offset:
 .highlight-detail.green mark { background: rgba(126,214,116,.62); }
 .dialog-actions { display: flex; justify-content: flex-end; gap: 8px; }
 .dialog-actions button { min-height: 36px; padding: 7px 13px; border-radius: 5px; cursor: pointer; }
+.round-completion-dialog { width: min(650px, calc(100vw - 28px)); }
+.round-completion-dialog > p:not(.dialog-kicker):not(.dialog-error) { margin: 0 0 14px; color: var(--ink-soft); line-height: 1.7; }
+.round-completion-options { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 14px; }
+.round-completion-options section { display: flex; min-height: 174px; padding: 15px; border: 1px solid var(--line); border-radius: 5px; background: var(--canvas); flex-direction: column; }
+.round-completion-options h3 { margin: 0 0 7px; font-size: 16px; }
+.round-completion-options p { margin: 0; color: var(--ink); font-size: 12px; line-height: 1.65; }
+.round-completion-options small { display: block; margin: 7px 0 14px; color: var(--ink-soft); font-size: 10px; line-height: 1.55; }
+.round-completion-options button { min-height: 39px; margin-top: auto; border-radius: 5px; font-weight: 700; cursor: pointer; }
+.round-completion-options button:disabled { opacity: .5; cursor: default; }
+.round-completion-actions { justify-content: center; }
+.finish-round-button { color: #fff; border: 1px solid #4d514b; background: #4d514b; }
+.finish-round-button:hover:not(:disabled) { background: #383c37; }
+.review-again-button { color: var(--ink); border: 1px solid var(--line-strong); background: #fff; }
+.review-again-button:hover:not(:disabled) { border-color: #767269; background: var(--canvas); }
+.round-save-summary { display: flex; gap: 8px; margin: 0 0 13px; align-items: baseline; }
+.round-save-summary dt { flex: 0 0 auto; color: var(--ink-soft); font-size: 11px; font-weight: 700; }
+.round-save-summary dd { min-width: 0; margin: 0; overflow-wrap: anywhere; font-family: Consolas, monospace; font-size: 11px; }
+.round-save-notice { margin: -3px 0 13px; padding-left: 10px; color: var(--ink-soft); border-left: 2px solid #b29b62; font-size: 10px; line-height: 1.65; }
+.round-completion-dialog .dialog-error { margin: 0 0 14px; padding: 9px 11px; color: #8b2926; background: #fff0e8; border: 1px solid #e4b7aa; border-radius: 4px; }
+.review-again-header-button { border-color: #527148; background: #527148; }
+.review-again-header-button:hover { background: #405b39; }
 .secondary-button { border: 1px solid var(--line); color: #5e5a52; background: #fff; }
 .red-action { border: 1px solid var(--shu); color: #fff; background: var(--shu); font-weight: 700; }
 .red-action:disabled { opacity: .45; cursor: default; }
@@ -408,6 +429,10 @@ button:focus-visible { outline: 3px solid rgba(40, 90, 145, .3); outline-offset:
 .theme-monochrome .draft-mode-switch { background: #f1f2f3; border-color: #d0d2d4; }
 .theme-monochrome .status-tag { color: #292d31; border: 1px solid #aeb2b6; background: #fff; }
 .theme-monochrome .markdown-body { color: #111318; background: #fff; }
+.theme-monochrome .draft-editing-area { background: #fff; }
+.theme-monochrome .draft-editor { color: #111318; background: #fff; caret-color: #111318; }
+.theme-monochrome .draft-editor:focus { box-shadow: inset 4px 0 0 rgba(201,33,29,.55); }
+.theme-monochrome .draft-edit-actions { border-color: #b8bcc0; background: rgba(255,255,255,.98); box-shadow: 0 6px 24px rgba(20,23,26,.16); }
 .theme-monochrome .markdown-body h1,
 .theme-monochrome .markdown-body h2,
 .theme-monochrome .markdown-body h3 { font-family: "Yu Gothic", sans-serif; font-weight: 800; }
@@ -430,7 +455,8 @@ button:focus-visible { outline: 3px solid rgba(40, 90, 145, .3); outline-offset:
 .theme-monochrome .markdown-export-dialog,
 .theme-monochrome .structure-dialog,
 .theme-monochrome .settings-dialog,
-.theme-monochrome .ai-review-export-dialog { color: #111318; border-color: #888d92; background: #fff; box-shadow: 0 18px 48px rgba(20,23,26,.24); }
+.theme-monochrome .ai-review-export-dialog,
+.theme-monochrome .round-completion-dialog { color: #111318; border-color: #888d92; background: #fff; box-shadow: 0 18px 48px rgba(20,23,26,.24); }
 .theme-monochrome .red-pen-dialog { border-top-color: var(--shu); }
 .theme-monochrome .highlight-dialog { border-top-color: #d3ad20; }
 .theme-monochrome .red-pen-dialog output { border-color: #b9bdc1; background: #f3f4f5; }
@@ -492,6 +518,9 @@ button:focus-visible { outline: 3px solid rgba(40, 90, 145, .3); outline-offset:
   .polishing-view-switch { padding-inline: 14px; }
   .dialog-backdrop { padding: 10px; }
   .red-pen-dialog { max-height: calc(100vh - 20px); padding: 24px 18px 20px; }
+  .round-completion-options { grid-template-columns: 1fr; }
+  .round-completion-options section { min-height: 150px; }
+  .round-save-summary { align-items: flex-start; flex-direction: column; gap: 3px; }
   .paste-markdown-dialog textarea { min-height: 280px; }
 }
 

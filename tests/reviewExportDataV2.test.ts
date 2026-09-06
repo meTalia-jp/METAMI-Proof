@@ -72,6 +72,16 @@ assert(embedded, 'HTML埋め込みJSONがありません')
 const roundTrip = JSON.parse(embedded!)
 assert(validateReviewExportData(roundTrip).ok, 'HTML埋め込みJSONの往復検証に失敗しました')
 assert(JSON.stringify(roundTrip) === JSON.stringify(data), 'HTML埋め込みJSONが元データと一致しません')
+const completedData = structuredClone(data)
+completedData.round.phase = 'completed'
+const completedHtml = renderReviewHtml(completedData)
+const completedEmbedded = completedHtml.match(/<script type="application\/json" id="metami-proof-review-data">([\s\S]*?)<\/script>/)?.[1]
+assert(completedEmbedded, 'completed HTMLに埋め込みJSONがありません')
+const completedRoundTrip = JSON.parse(completedEmbedded!)
+assert(validateReviewExportData(completedRoundTrip).ok, 'completed HTMLのReviewExportDataを再検証できません')
+assert(completedRoundTrip.round.phase === 'completed' && completedRoundTrip.round.number === 1, 'completed HTMLのphaseまたはRound番号が不正です')
+assert(completedRoundTrip.document.originalMarkdown === 'Hello world' && completedRoundTrip.document.draftMarkdown === 'Hello earth', 'completed HTMLの原文または最終稿が不正です')
+assert(completedRoundTrip.annotations.length === data.annotations.length, 'completed HTMLに当該Roundのannotationが保持されていません')
 const monochromeEmbedded = monochromeHtml.match(/<script type="application\/json" id="metami-proof-review-data">([\s\S]*?)<\/script>/)?.[1]
 assert(monochromeEmbedded && monochromeEmbedded === embedded, 'テーマによってHTML埋め込みReview JSONが変化しています')
 const englishEmbedded = englishHtml.match(/<script type="application\/json" id="metami-proof-review-data">([\s\S]*?)<\/script>/)?.[1]

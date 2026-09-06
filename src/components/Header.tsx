@@ -21,6 +21,8 @@ type HeaderProps = {
   onPreviousPending: () => void; onNextPending: () => void; phase: ReviewPhase
   reviewerCompletedCount: number; reviewerCount: number; onCompleteReview: () => void
   canStartPolishing: boolean; onStartPolishing: () => void
+  onCompleteRound: () => void
+  currentRoundNumber: number; canReviewAgain: boolean; onReviewAgain: () => void
   onOpenSettings: () => void
 }
 
@@ -33,7 +35,7 @@ const layouts: { id: PaneLayout; labelKey: TranslationKey }[] = [
 ]
 
 export function Header(props: HeaderProps) {
-  const { onOpenFile, onPasteMarkdown, onOpenWorkData, onExportWorkData, canExportWorkData, onExportMarkdown, canExportMarkdown, onExportReviewHtml, canExportReviewHtml, onSwap, onToggleSidebar, activeTool, onToolChange, paneLayout, onPaneLayoutChange, sidebarOpen, canSelectTools, annotationCount, pendingCount, onPreviousPending, onNextPending, phase, reviewerCompletedCount, reviewerCount, onCompleteReview, canStartPolishing, onStartPolishing, onOpenSettings } = props
+  const { onOpenFile, onPasteMarkdown, onOpenWorkData, onExportWorkData, canExportWorkData, onExportMarkdown, canExportMarkdown, onExportReviewHtml, canExportReviewHtml, onSwap, onToggleSidebar, activeTool, onToolChange, paneLayout, onPaneLayoutChange, sidebarOpen, canSelectTools, annotationCount, pendingCount, onPreviousPending, onNextPending, phase, reviewerCompletedCount, reviewerCount, onCompleteReview, canStartPolishing, onStartPolishing, onCompleteRound, currentRoundNumber, canReviewAgain, onReviewAgain, onOpenSettings } = props
   const [openMenu, setOpenMenu] = useState<MenuName | null>(null)
   const { t } = useTranslation()
   const menusRef = useRef<HTMLDivElement>(null)
@@ -72,12 +74,14 @@ export function Header(props: HeaderProps) {
       <span className="reviewer-progress">{t('header.reviewerProgress', { completed: reviewerCompletedCount, total: reviewerCount })}</span>
       {phase === 'reviewing' && <button className="phase-complete-button" type="button" onClick={onCompleteReview}>{t('header.completeReview')}</button>}
       {phase === 'revising' && <button className="phase-complete-button" type="button" onClick={onStartPolishing} disabled={!canStartPolishing} title={canStartPolishing ? t('header.finishRevisionHelp') : t('header.finishRevisionBlocked')}>{t('header.completeRevision')}</button>}
+      {phase === 'polishing' && <button className="phase-complete-button" type="button" onClick={onCompleteRound}>{t('roundComplete.action')}</button>}
+      {phase === 'completed' && canReviewAgain && <button className="phase-complete-button review-again-header-button" type="button" onClick={onReviewAgain}>{t('roundComplete.startNext')}</button>}
       <button className="icon-button" type="button" onClick={onSwap} disabled={paneLayout !== 'sideBySide'} aria-label={t('header.swapAria')} title={paneLayout === 'sideBySide' ? t('header.swap') : t('header.swapUnavailable')}>⇄</button>
       <button className="icon-button sidebar-toggle" type="button" onClick={onToggleSidebar} aria-label={sidebarOpen ? t('header.closeSidebar') : t('header.openSidebar')} aria-expanded={sidebarOpen}>▤</button>
       <div className="reviewer"><span>{t('header.reviewer')}</span><span className="avatar">{t('header.me')}</span></div>
     </div>
     {(annotationCount > 0 || phase === 'revising' || phase === 'polishing' || phase === 'completed') && <div className={`header-workflow ${pendingCount === 0 ? 'all-complete' : ''}`} role="status">
-      {phase === 'completed' ? <strong>{t('header.roundCompleted')}</strong> : phase === 'polishing' ? <strong>{t('header.instructionsProcessed')}</strong> : pendingCount === 0 ? <strong>{t('header.allChecked', { total: annotationCount })}</strong> : <strong>{t('header.pending', { pending: pendingCount, total: annotationCount })}</strong>}
+      {phase === 'completed' ? <strong>{t('header.roundCompleted', { round: currentRoundNumber })}</strong> : phase === 'polishing' ? <strong>{t('header.instructionsProcessed')}</strong> : pendingCount === 0 ? <strong>{t('header.allChecked', { total: annotationCount })}</strong> : <strong>{t('header.pending', { pending: pendingCount, total: annotationCount })}</strong>}
       {phase === 'revising' && pendingCount > 0 && <div className="pending-navigation" aria-label={t('header.pendingNavigation')}><button type="button" onClick={onPreviousPending}>{t('header.previousPending')}</button><button type="button" onClick={onNextPending}>{t('header.nextPending')}</button></div>}
     </div>}
   </header>

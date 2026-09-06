@@ -1,18 +1,19 @@
 type MarkdownExportDialogProps = {
   fileName: string
+  roundNumber: number
   exporting: boolean
   error: string
   onBack: () => void
   onExport: () => void
 }
 
-export function MarkdownExportDialog({ fileName, exporting, error, onBack, onExport }: MarkdownExportDialogProps) {
+export function MarkdownExportDialog({ fileName, roundNumber, exporting, error, onBack, onExport }: MarkdownExportDialogProps) {
   const { t } = useTranslation()
   return (
     <div className="dialog-backdrop" role="presentation">
       <section className="markdown-export-dialog" role="dialog" aria-modal="true" aria-labelledby="markdown-export-title">
         <span className="dialog-pin" aria-hidden="true" />
-        <p className="dialog-kicker">ROUND 1 / MARKDOWN EXPORT</p>
+        <p className="dialog-kicker">ROUND {roundNumber} / MARKDOWN EXPORT</p>
         <h2 id="markdown-export-title">{t('export.title')}</h2>
         <p>{t('export.lockWarning')}</p>
         <p>{t('export.nextRound')}</p>
