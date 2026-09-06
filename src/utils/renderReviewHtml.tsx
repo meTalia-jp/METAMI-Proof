@@ -1,10 +1,32 @@
 import { renderToStaticMarkup } from 'react-dom/server'
 import { MarkdownViewer } from '../components/MarkdownViewer'
 import type { AppTheme } from '../config/settings'
+import type { Locale } from '../i18n'
 import type { HighlightAnnotation, RedPenAnnotation } from '../types/annotation'
-import type { ExportRedPenAnnotation, ReviewExportDataV2 } from '../types/portableReview'
+import type { ReviewExportDataV2 } from '../types/portableReview'
 
-const tagLabels: Record<string, string> = { question: '疑問', rewrite: '修正', delete: '削除', add: '追記', fact_check: '要確認', note: 'メモ' }
+const reviewHtmlLabels = {
+  ja: {
+    result: '校正結果', sourceFile: '元ファイル', phase: '工程', reviewer: '校正者', redPen: '赤ペン', highlight: '蛍光', count: (value: number) => `${value}件`,
+    target: '対象', comment: 'コメント', tag: 'タグ', proposedText: '本文案', deletionProposal: '削除案', deleteTarget: '対象文章を削除', none: 'なし', notSet: '未設定',
+    reviewItems: '校正一覧', noRedPen: '赤ペン校正はありません。', noHighlight: '蛍光校正はありません。', documentAria: '原文と校正結果', highlightCommentAria: '蛍光コメント',
+    footer: 'このファイルには、人間向け校正表示と機械向けReviewExportData 2.0 Nightly revision 1が含まれています。',
+    status: { pending: '未完了', completed_changed: '修正済み', completed_unchanged: '変更せず完了' },
+    colors: { yellow: '黄色', green: '緑' },
+    tags: { question: '疑問', rewrite: '修正', delete: '削除', add: '追記', fact_check: '要確認', note: 'メモ' },
+    separator: '：', listSeparator: '、',
+  },
+  en: {
+    result: 'Review Results', sourceFile: 'Source file', phase: 'Phase', reviewer: 'Reviewer', redPen: 'Red Pen', highlight: 'Highlight', count: (value: number) => String(value),
+    target: 'Target', comment: 'Comment', tag: 'Tag', proposedText: 'Proposed text', deletionProposal: 'Deletion proposal', deleteTarget: 'Delete target text', none: 'None', notSet: 'Not set',
+    reviewItems: 'Review items', noRedPen: 'No red pen reviews.', noHighlight: 'No highlight reviews.', documentAria: 'Original text and review results', highlightCommentAria: 'Highlight comment',
+    footer: 'This file contains a human-readable review and machine-readable ReviewExportData 2.0 Nightly revision 1.',
+    status: { pending: 'Pending', completed_changed: 'Revised', completed_unchanged: 'Completed unchanged' },
+    colors: { yellow: 'Yellow', green: 'Green' },
+    tags: { question: 'Question', rewrite: 'Rewrite', delete: 'Delete', add: 'Add', fact_check: 'Needs verification', note: 'Note' },
+    separator: ': ', listSeparator: ', ',
+  },
+} as const
 
 const escapeHtml = (value: string) => value
   .replace(/&/g, '&amp;')
@@ -18,43 +40,37 @@ const safeEmbeddedJson = (data: ReviewExportDataV2) => JSON.stringify(data, null
   .replace(/\u2028/g, '\\u2028')
   .replace(/\u2029/g, '\\u2029')
 
-const statusLabel = (status: ExportRedPenAnnotation['status']) => {
-  if (status === 'completed_changed') return '修正済み'
-  if (status === 'completed_unchanged') return '変更せず完了'
-  return '未完了'
-}
-
-const highlightColorLabel = (color: string) => color === 'green' ? '緑' : color === 'yellow' ? '黄色' : color
-
-function renderSidebar(data: ReviewExportDataV2) {
+function renderSidebar(data: ReviewExportDataV2, locale: Locale) {
+  const labels = reviewHtmlLabels[locale]
   const reviewerNames = new Map(data.reviewers.map(reviewer => [reviewer.id, reviewer.name]))
   const correctionData = data.annotations.filter(annotation => annotation.type === 'red_pen')
   const highlightData = data.annotations.filter(annotation => annotation.type === 'highlight')
   const corrections = correctionData.map(annotation => `
     <button class="review-list-item correction-item" type="button" data-sidebar-review-id="${escapeHtml(annotation.id)}">
-      <span class="item-kind">赤ペン・${escapeHtml(statusLabel(annotation.status))}</span>
-      <span><b>対象：</b>${escapeHtml(annotation.originalAnchor.targetText)}</span>
-      ${annotation.reviewText !== undefined ? `<span><b>コメント：</b>${escapeHtml(annotation.reviewText)}</span>` : ''}
-      ${annotation.replacementText !== undefined ? `<span><b>${annotation.replacementText === '' ? '削除案' : '本文案'}：</b>${escapeHtml(annotation.replacementText || '対象文章を削除')}</span>` : ''}
-      ${annotation.tag ? `<span><b>タグ：</b>${escapeHtml(tagLabels[annotation.tag] ?? annotation.tag)}</span>` : ''}
-      <span><b>校正者：</b>${escapeHtml(reviewerNames.get(annotation.reviewerId) ?? '未設定')}</span>
+      <span class="item-kind">${labels.redPen}・${escapeHtml(labels.status[annotation.status])}</span>
+      <span><b>${labels.target}${labels.separator}</b>${escapeHtml(annotation.originalAnchor.targetText)}</span>
+      ${annotation.reviewText !== undefined ? `<span><b>${labels.comment}${labels.separator}</b>${escapeHtml(annotation.reviewText)}</span>` : ''}
+      ${annotation.replacementText !== undefined ? `<span><b>${annotation.replacementText === '' ? labels.deletionProposal : labels.proposedText}${labels.separator}</b>${escapeHtml(annotation.replacementText || labels.deleteTarget)}</span>` : ''}
+      ${annotation.tag ? `<span><b>${labels.tag}${labels.separator}</b>${escapeHtml(labels.tags[annotation.tag] ?? annotation.tag)}</span>` : ''}
+      <span><b>${labels.reviewer}${labels.separator}</b>${escapeHtml(reviewerNames.get(annotation.reviewerId) ?? labels.notSet)}</span>
     </button>`).join('')
   const highlights = highlightData.map(annotation => `
     <button class="review-list-item highlight-item" type="button" data-sidebar-review-id="${escapeHtml(annotation.id)}">
-      <span class="item-kind">蛍光・${escapeHtml(highlightColorLabel(annotation.color))}</span>
-      <span><b>対象：</b>${escapeHtml(annotation.originalAnchor.targetText)}</span>
-      ${annotation.comment ? `<span><b>コメント：</b>${escapeHtml(annotation.comment)}</span>` : '<span><b>コメント：</b>なし</span>'}
-      ${annotation.tag ? `<span><b>タグ：</b>${escapeHtml(tagLabels[annotation.tag] ?? annotation.tag)}</span>` : ''}
-      <span><b>校正者：</b>${escapeHtml(reviewerNames.get(annotation.reviewerId) ?? '未設定')}</span>
+      <span class="item-kind">${labels.highlight}・${escapeHtml(labels.colors[annotation.color] ?? annotation.color)}</span>
+      <span><b>${labels.target}${labels.separator}</b>${escapeHtml(annotation.originalAnchor.targetText)}</span>
+      ${annotation.comment ? `<span><b>${labels.comment}${labels.separator}</b>${escapeHtml(annotation.comment)}</span>` : `<span><b>${labels.comment}${labels.separator}</b>${labels.none}</span>`}
+      ${annotation.tag ? `<span><b>${labels.tag}${labels.separator}</b>${escapeHtml(labels.tags[annotation.tag] ?? annotation.tag)}</span>` : ''}
+      <span><b>${labels.reviewer}${labels.separator}</b>${escapeHtml(reviewerNames.get(annotation.reviewerId) ?? labels.notSet)}</span>
     </button>`).join('')
   return `
-    <aside class="review-sidebar" aria-label="校正一覧">
-      <section><h2>赤ペン <span>${correctionData.length}件</span></h2>${corrections || '<p class="empty-list">赤ペン校正はありません。</p>'}</section>
-      <section><h2>蛍光 <span>${highlightData.length}件</span></h2>${highlights || '<p class="empty-list">蛍光校正はありません。</p>'}</section>
+    <aside class="review-sidebar" aria-label="${labels.reviewItems}">
+      <section><h2>${labels.redPen} <span>${labels.count(correctionData.length)}</span></h2>${corrections || `<p class="empty-list">${labels.noRedPen}</p>`}</section>
+      <section><h2>${labels.highlight} <span>${labels.count(highlightData.length)}</span></h2>${highlights || `<p class="empty-list">${labels.noHighlight}</p>`}</section>
     </aside>`
 }
 
-export function renderReviewHtml(data: ReviewExportDataV2, theme: AppTheme = 'paper') {
+export function renderReviewHtml(data: ReviewExportDataV2, theme: AppTheme = 'paper', locale: Locale = 'ja') {
+  const labels = reviewHtmlLabels[locale]
   const reviewerById = new Map(data.reviewers.map(reviewer => [reviewer.id, reviewer]))
   const corrections = data.annotations.filter(annotation => annotation.type === 'red_pen').map(annotation => ({
     ...annotation.originalAnchor, ...annotation, anchorStatus: annotation.draftAnchor ? 'resolved' : 'unresolved', reviewer: reviewerById.get(annotation.reviewerId),
@@ -69,16 +85,17 @@ export function renderReviewHtml(data: ReviewExportDataV2, theme: AppTheme = 'pa
       highlights={highlights}
       activeAnnotationId={null}
       mode="original"
+      locale={locale}
     />,
   )
-  const reviewerNames = data.reviewers.map(reviewer => reviewer.name).join('、') || '未設定'
+  const reviewerNames = data.reviewers.map(reviewer => reviewer.name).join(labels.listSeparator) || labels.notSet
   const embeddedJson = safeEmbeddedJson(data)
-  const title = `${data.document.sourceFileName || '文書'} - ${data.generator.name} 校正結果`
+  const title = `${data.document.sourceFileName || labels.notSet} - ${data.generator.name} ${labels.result}`
   const correctionCount = corrections.length
   const highlightCount = highlights.length
 
   return `<!doctype html>
-<html lang="ja">
+<html lang="${locale}">
 <head>
   <meta charset="utf-8">
   <meta name="metami-proof-format" content="review">
@@ -101,7 +118,7 @@ export function renderReviewHtml(data: ReviewExportDataV2, theme: AppTheme = 'pa
     .review-document blockquote{margin:1.3em 0;padding:.7em 1.2em;color:#5d5950;background:#faf3d9;border-left:4px solid #d6b847}
     .review-document code{padding:.12em .35em;border-radius:3px;color:#7e2927;background:#eee9dc;font-family:Consolas,monospace}.review-document pre{overflow:auto;padding:15px 17px;color:#f4f0e6;background:#33332f;border-radius:4px}.review-document pre code{padding:0;color:inherit;background:transparent}
     .review-document table{width:100%;border-collapse:collapse;margin:1.2em 0}.review-document th,.review-document td{padding:7px 9px;border:1px solid #cfc6b7;text-align:left}.review-document th{background:#eee9dc}.review-document a{color:#285a91}
-    .red-pen-annotation .del{color:#514e48;background:none;text-decoration:line-through;text-decoration-color:rgba(197,47,43,.75);text-decoration-thickness:1.5px}.red-pen-annotation .ins{display:inline-block;margin-left:.42em;color:var(--red);font-weight:800}.red-pen-annotation .ins::before{content:"挿";margin-right:.25em;color:#ad6c68;font-size:8px;vertical-align:super}.annotation-complete-mark{margin-left:.3em;color:#527148;font-size:.78em;font-weight:700}
+    .red-pen-annotation .del{color:#514e48;background:none;text-decoration:line-through;text-decoration-color:rgba(197,47,43,.75);text-decoration-thickness:1.5px}.red-pen-annotation .ins{display:inline-block;margin-left:.42em;color:var(--red);font-weight:800}.red-pen-annotation .ins::before{content:attr(data-label);margin-right:.25em;color:#ad6c68;font-size:8px;vertical-align:super}.annotation-complete-mark{margin-left:.3em;color:#527148;font-size:.78em;font-weight:700}
     .highlight-annotation{padding:1px 0;color:inherit;background:var(--yellow);box-shadow:inset 0 -2px 0 rgba(201,153,0,.24);border-radius:2px;cursor:pointer}.highlight-annotation.highlight-green{background:var(--green);box-shadow:inset 0 -2px 0 rgba(53,139,69,.24)}.attention-badge{display:inline-block;margin:0 .12em 0 .32em;padding:.12em .48em;border:1px solid #aaa08f;border-radius:999px;color:#574f44;background:#f5f0e5;font-size:10px;font-weight:700;line-height:1.45;vertical-align:.12em;cursor:pointer;white-space:nowrap}.attention-badge-comment{color:#465a68;border-color:#9babb4;background:#edf2f4}.attention-badge-proposal{color:#962e2a;border-color:#d39b96;background:#fff0ed}.attention-badge-deletion{color:#fff;border-color:#a92c28;background:#bd3732}.attention-badge:hover,.attention-badge:focus-visible{outline:2px solid rgba(46,101,158,.35);outline-offset:1px}
     [data-review-id].is-linked{outline:2px solid #2e659e;outline-offset:2px}.review-sidebar{position:sticky;top:16px;display:grid;gap:14px}.review-sidebar section{padding:15px;background:var(--paper);border:1px solid var(--line);box-shadow:0 4px 15px rgba(50,42,28,.1)}.review-sidebar h2{display:flex;justify-content:space-between;margin:0 0 10px;font-size:15px}.review-sidebar h2 span{color:var(--soft);font-size:10px}
     .review-list-item{width:100%;display:grid;gap:4px;padding:9px 8px;border:0;border-top:1px dotted #d9cfbd;color:#4a4740;background:transparent;text-align:left;cursor:pointer;font:inherit;font-size:11px}.review-list-item:first-of-type{border-top:0}.review-list-item:hover,.review-list-item.is-linked{background:#f5efe2}.review-list-item span{overflow-wrap:anywhere}.item-kind{color:var(--red);font-size:9px;font-weight:700}.highlight-item .item-kind{color:#80630b}.empty-list{color:#817a6f;font-size:11px}
@@ -113,15 +130,15 @@ export function renderReviewHtml(data: ReviewExportDataV2, theme: AppTheme = 'pa
 </head>
 <body class="review-theme-${theme}">
   <header class="result-header">
-    <h1>${escapeHtml(data.generator.name)} 校正結果</h1>
-    <p class="result-meta"><span>${escapeHtml(data.generator.name)} ${escapeHtml(data.generator.version)}</span><span>元ファイル：${escapeHtml(data.document.sourceFileName || '未設定')}</span><span>Round ${data.round.number}</span><span>工程：${escapeHtml(data.round.phase)}</span><span>校正者：${escapeHtml(reviewerNames)}</span><span>赤ペン：${correctionCount}件</span><span>蛍光：${highlightCount}件</span></p>
+    <h1>${escapeHtml(data.generator.name)} ${labels.result}</h1>
+    <p class="result-meta"><span>${escapeHtml(data.generator.name)} ${escapeHtml(data.generator.version)}</span><span>${labels.sourceFile}${labels.separator}${escapeHtml(data.document.sourceFileName || labels.notSet)}</span><span>Round ${data.round.number}</span><span>${labels.phase}${labels.separator}${escapeHtml(data.round.phase)}</span><span>${labels.reviewer}${labels.separator}${escapeHtml(reviewerNames)}</span><span>${labels.redPen}${labels.separator}${labels.count(correctionCount)}</span><span>${labels.highlight}${labels.separator}${labels.count(highlightCount)}</span></p>
   </header>
   <main class="review-layout">
-    <article class="review-document" aria-label="原文と校正結果">${documentHtml}</article>
-    ${renderSidebar(data)}
+    <article class="review-document" aria-label="${labels.documentAria}">${documentHtml}</article>
+    ${renderSidebar(data, locale)}
   </main>
-  <div id="metami-comment-popover" class="comment-popover screen-only" role="dialog" aria-label="蛍光コメント" hidden><p></p><small></small></div>
-  <footer class="result-footer">このファイルには、人間向け校正表示と機械向けReviewExportData 2.0 Nightly revision 1が含まれています。</footer>
+  <div id="metami-comment-popover" class="comment-popover screen-only" role="dialog" aria-label="${labels.highlightCommentAria}" hidden><p></p><small></small></div>
+  <footer class="result-footer">${labels.footer}</footer>
   <script type="application/json" id="metami-proof-review-data">${embeddedJson}</script>
   <script>
     (()=>{
@@ -129,7 +146,7 @@ export function renderReviewHtml(data: ReviewExportDataV2, theme: AppTheme = 'pa
       const clearLinked=()=>document.querySelectorAll('.is-linked').forEach(el=>el.classList.remove('is-linked'));
       const linkReview=id=>{clearLinked();document.querySelectorAll('[data-review-id="'+CSS.escape(id)+'"],[data-sidebar-review-id="'+CSS.escape(id)+'"]').forEach(el=>el.classList.add('is-linked'));};
       const closePopover=()=>{popover.hidden=true;activeMarker=null;};
-      const openPopover=marker=>{const rect=marker.getBoundingClientRect();popover.querySelector('p').textContent=marker.dataset.comment||'';popover.querySelector('small').textContent='校正者：'+(marker.dataset.reviewer||'未設定');popover.hidden=false;const gap=8;const width=popover.offsetWidth;const height=popover.offsetHeight;popover.style.left=Math.max(12,Math.min(rect.left,innerWidth-width-12))+'px';popover.style.top=(rect.bottom+gap+height<innerHeight?rect.bottom+gap:Math.max(12,rect.top-height-gap))+'px';activeMarker=marker;};
+      const openPopover=marker=>{const rect=marker.getBoundingClientRect();popover.querySelector('p').textContent=marker.dataset.comment||'';popover.querySelector('small').textContent=${JSON.stringify(`${labels.reviewer}${labels.separator}`)}+(marker.dataset.reviewer||${JSON.stringify(labels.notSet)});popover.hidden=false;const gap=8;const width=popover.offsetWidth;const height=popover.offsetHeight;popover.style.left=Math.max(12,Math.min(rect.left,innerWidth-width-12))+'px';popover.style.top=(rect.bottom+gap+height<innerHeight?rect.bottom+gap:Math.max(12,rect.top-height-gap))+'px';activeMarker=marker;};
       document.addEventListener('click',event=>{const marker=event.target.closest('.attention-badge[data-review-type="highlight"][data-comment]:not([data-comment=""])');if(marker){event.stopPropagation();linkReview(marker.dataset.reviewId);if(activeMarker===marker&&!popover.hidden)closePopover();else openPopover(marker);return}const review=event.target.closest('[data-review-id]');if(review){linkReview(review.dataset.reviewId);return}const side=event.target.closest('[data-sidebar-review-id]');if(side){const id=side.dataset.sidebarReviewId;linkReview(id);document.querySelector('[data-review-id="'+CSS.escape(id)+'"]')?.scrollIntoView({behavior:'smooth',block:'center'});closePopover();return}if(!popover.contains(event.target))closePopover();});
       document.addEventListener('keydown',event=>{if(event.key==='Escape'){closePopover();clearLinked();return}if((event.key==='Enter'||event.key===' ')&&event.target.matches('[data-review-id][role="button"]')){event.preventDefault();event.target.click();}});
       addEventListener('scroll',closePopover,true);

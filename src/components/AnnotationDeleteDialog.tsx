@@ -1,4 +1,5 @@
 import type { HighlightAnnotation, RedPenAnnotation } from '../types/annotation'
+import { useTranslation } from '../i18n'
 
 type AnnotationDeleteDialogProps = {
   target: { kind: 'red_pen'; annotation: RedPenAnnotation } | { kind: 'highlight'; annotation: HighlightAnnotation }
@@ -7,23 +8,24 @@ type AnnotationDeleteDialogProps = {
 }
 
 export function AnnotationDeleteDialog({ target, onCancel, onConfirm }: AnnotationDeleteDialogProps) {
+  const { t } = useTranslation()
   const isRedPen = target.kind === 'red_pen'
   return (
     <div className="dialog-backdrop" role="presentation" onMouseDown={event => event.target === event.currentTarget && onCancel()}>
       <section className="review-lock-dialog annotation-delete-dialog" role="dialog" aria-modal="true" aria-labelledby="annotation-delete-title">
         <span className="dialog-pin eraser-pin" aria-hidden="true" />
         <p className="dialog-kicker">ERASER</p>
-        <h2 id="annotation-delete-title">この校正を削除しますか？</h2>
+        <h2 id="annotation-delete-title">{t('annotationDelete.title')}</h2>
         <div className="delete-confirm-details">
-          <p><span>対象</span><output>{target.annotation.targetText}</output></p>
+          <p><span>{t('common.target')}</span><output>{target.annotation.targetText}</output></p>
           {isRedPen
-            ? <p><span>レビュー</span><output>{target.annotation.reviewText ?? target.annotation.replacementText ?? '（なし）'}</output></p>
-            : target.annotation.comment && <p><span>コメント</span><output>{target.annotation.comment}</output></p>}
+            ? <p><span>{t('annotationDelete.review')}</span><output>{target.annotation.reviewText ?? target.annotation.replacementText ?? t('common.none')}</output></p>
+            : target.annotation.comment && <p><span>{t('common.comment')}</span><output>{target.annotation.comment}</output></p>}
         </div>
-        <p className="delete-warning">本文Markdownは変更されません。校正マークだけを削除します。</p>
+        <p className="delete-warning">{t('annotationDelete.warning')}</p>
         <div className="dialog-actions">
-          <button className="secondary-button" type="button" onClick={onCancel}>キャンセル</button>
-          <button className="delete-action" type="button" onClick={onConfirm}>削除</button>
+          <button className="secondary-button" type="button" onClick={onCancel}>{t('common.cancel')}</button>
+          <button className="delete-action" type="button" onClick={onConfirm}>{t('common.delete')}</button>
         </div>
       </section>
     </div>

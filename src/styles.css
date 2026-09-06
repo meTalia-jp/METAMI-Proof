@@ -114,11 +114,11 @@ button:focus-visible { outline: 3px solid rgba(40, 90, 145, .3); outline-offset:
 .document-pane.original .markdown-body p,
 .document-pane.original .markdown-body li { white-space: pre-line; }
 .document-selection { position: relative; padding: 1px 2px; color: inherit; background: linear-gradient(180deg, transparent 18%, rgba(244,211,94,.72) 18%, rgba(244,211,94,.72) 88%, transparent 88%); border-bottom: 2px solid var(--shu); box-decoration-break: clone; -webkit-box-decoration-break: clone; }
-.document-selection.selection-start::after { content: "選択中"; position: absolute; left: 0; bottom: calc(100% + 2px); padding: 1px 5px; border-radius: 3px 3px 3px 0; color: #fff; background: var(--shu); font-size: 8px; font-weight: 700; line-height: 1.4; white-space: nowrap; }
+.document-selection.selection-start::after { content: attr(data-label); position: absolute; left: 0; bottom: calc(100% + 2px); padding: 1px 5px; border-radius: 3px 3px 3px 0; color: #fff; background: var(--shu); font-size: 8px; font-weight: 700; line-height: 1.4; white-space: nowrap; }
 .red-pen-annotation { position: relative; display: inline; }
 .red-pen-annotation .del { color: #514e48; background: none; text-decoration: line-through; text-decoration-color: rgba(187,48,45,.72); text-decoration-thickness: 1.5px; }
 .red-pen-annotation .ins { position: relative; display: inline-block; margin-left: .42em; padding: 0; color: #c52f2b; background: none; border-radius: 0; font-weight: 800; }
-.red-pen-annotation .ins::before { content: "挿"; position: absolute; top: -1.2em; left: .1em; color: #ad6c68; font-size: 8px; font-weight: 600; line-height: 1; }
+.red-pen-annotation .ins::before { content: attr(data-label); position: absolute; top: -1.2em; left: .1em; color: #ad6c68; font-size: 8px; font-weight: 600; line-height: 1; }
 .pending-anchor { position: relative; border-bottom: 1px dotted rgba(187,48,45,.55); }
 .pending-marker { display: inline-block; margin-left: .38em; padding: 1px 6px; border: 1px solid var(--shu); border-radius: 999px; color: var(--shu); background: #fffaf3; font-size: 9px; font-weight: 700; line-height: 1.5; vertical-align: .12em; white-space: nowrap; }
 .red-pen-annotation, .pending-anchor { cursor: pointer; border-radius: 2px; transition: opacity .2s, background-color .2s, box-shadow .2s; }
@@ -473,7 +473,7 @@ button:focus-visible { outline: 3px solid rgba(40, 90, 145, .3); outline-offset:
   .header-menu-panel { min-width: 100%; }
   .tools { overflow-x: auto; justify-content: flex-start; margin-inline: -12px; padding-inline: 12px; }
   .tool-button { flex: none; }
-  .file-button { font-size: 0; }.file-button::after { content: "開く"; font-size: 12px; }
+  .file-button { font-size: 12px; }
   .mobile-tabs { position: sticky; top: 0; z-index: 15; display: grid; grid-template-columns: 1fr 1fr; padding: 10px 14px 0; background: var(--canvas); }
   .selection-notice { position: relative; top: auto; align-items: flex-start; padding-left: 12px; }
   .selection-notice.floating-format-error { position: fixed; top: 10px; right: 10px; width: calc(100vw - 20px); padding: 14px 42px 14px 14px; }

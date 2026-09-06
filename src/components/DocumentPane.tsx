@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent } from 'react'
 import { MarkdownViewer } from './MarkdownViewer'
 import type { DocumentSelection, HighlightAnnotation, RedPenAnnotation } from '../types/annotation'
+import { useTranslation } from '../i18n'
 
 type DocumentPaneProps = {
   kind: 'original' | 'draft'
@@ -28,6 +29,7 @@ type DocumentPaneProps = {
 }
 
 export function DocumentPane({ kind, markdown, fileName, annotations, highlights, documentSelection, activeAnnotationId, draftEditing, onOriginalSelection, onAnnotationClick, eraserActive = false, onAnnotationDeleteRequest, onDraftEditingChange, draftCanEdit = false, editingMarkdown = markdown, onBeginDraftEditing, onEditingDraftChange, onCancelDraftEditing, onApplyDraftEditing, directEditing = false, onRequestPreview, editSelection }: DocumentPaneProps) {
+  const { t } = useTranslation()
   const isOriginal = kind === 'original'
   const editorRef = useRef<HTMLTextAreaElement>(null)
   const popoverRef = useRef<HTMLDivElement>(null)
@@ -139,27 +141,27 @@ export function DocumentPane({ kind, markdown, fileName, annotations, highlights
   }
 
   return (
-    <section className={`document-pane ${kind}`} aria-label={isOriginal ? '原本' : '修正文書'}>
+    <section className={`document-pane ${kind}`} aria-label={isOriginal ? t('document.originalAria') : t('document.draftAria')}>
       <div className="pane-heading">
         <div>
           <span className="pane-kicker">{isOriginal ? 'ORIGINAL' : 'WORKING COPY'}</span>
-          <h2>{isOriginal ? '原本 ＋ 校正レイヤー' : '修正文書（編集対象）'}</h2>
+          <h2>{isOriginal ? t('document.originalTitle') : t('document.draftTitle')}</h2>
         </div>
-        <span className="status-tag">{isOriginal ? '読み取り専用' : draftEditing ? 'Markdown編集中' : 'プレビュー'}</span>
+        <span className="status-tag">{isOriginal ? t('document.readOnly') : draftEditing ? t('document.editing') : t('document.preview')}</span>
       </div>
-      <div className="file-strip" title={fileName}>{fileName || 'ファイル未選択'}</div>
+      <div className="file-strip" title={fileName}>{fileName || t('document.noFile')}</div>
       {!isOriginal && (
-        <div className="draft-mode-switch" role="group" aria-label="修正文書の表示モード">
-          <button type="button" className={!draftEditing ? 'active' : ''} onClick={directEditing ? onRequestPreview : () => onDraftEditingChange?.(false)} disabled={draftEditing && !directEditing}>プレビュー</button>
-          <button type="button" className={draftEditing ? 'active' : ''} onClick={onBeginDraftEditing} disabled={!draftCanEdit || draftEditing} title={draftCanEdit ? '' : '校正を確定して修正フェーズへ進むと編集できます'}>Markdown編集</button>
+        <div className="draft-mode-switch" role="group" aria-label={t('document.modeAria')}>
+          <button type="button" className={!draftEditing ? 'active' : ''} onClick={directEditing ? onRequestPreview : () => onDraftEditingChange?.(false)} disabled={draftEditing && !directEditing}>{t('document.preview')}</button>
+          <button type="button" className={draftEditing ? 'active' : ''} onClick={onBeginDraftEditing} disabled={!draftCanEdit || draftEditing} title={draftCanEdit ? '' : t('document.editUnavailable')}>{t('document.editMarkdown')}</button>
         </div>
       )}
       {!isOriginal && draftEditing ? (
         <div className="draft-editing-area">
-          <textarea ref={editorRef} className="draft-editor" aria-label="修正文書Markdown" value={editingMarkdown} onChange={event => onEditingDraftChange?.(event.target.value)} spellCheck={false} />
+          <textarea ref={editorRef} className="draft-editor" aria-label={t('document.markdownAria')} value={editingMarkdown} onChange={event => onEditingDraftChange?.(event.target.value)} spellCheck={false} />
           {!directEditing && <div className="draft-edit-actions">
-            <button className="secondary-button" type="button" onClick={onCancelDraftEditing}>キャンセル</button>
-            <button className="red-action" type="button" onClick={onApplyDraftEditing} title="Markdown編集欄の変更を本文に反映し、見出し・箇条書きなどの表示を更新します。校正箇所の「修正完了」とは別の操作です。">レイアウトに反映</button>
+            <button className="secondary-button" type="button" onClick={onCancelDraftEditing}>{t('common.cancel')}</button>
+            <button className="red-action" type="button" onClick={onApplyDraftEditing} title={t('document.applyLayoutTip')}>{t('document.applyLayout')}</button>
           </div>}
         </div>
       ) : (
@@ -168,9 +170,9 @@ export function DocumentPane({ kind, markdown, fileName, annotations, highlights
             <MarkdownViewer markdown={markdown} annotations={annotations} highlights={highlights} selection={isOriginal ? documentSelection : null} activeAnnotationId={activeAnnotationId} mode={kind} />
           </article>
           {commentPopover && (
-            <div ref={popoverRef} className="highlight-comment-popover" role="dialog" aria-label="蛍光コメント" style={{ top: commentPopover.top, left: commentPopover.left }}>
+            <div ref={popoverRef} className="highlight-comment-popover" role="dialog" aria-label={t('document.highlightCommentAria')} style={{ top: commentPopover.top, left: commentPopover.left }}>
               <p>{commentPopover.comment}</p>
-              <span>校正者：{commentPopover.reviewer}</span>
+              <span>{t('document.reviewer', { name: commentPopover.reviewer })}</span>
             </div>
           )}
         </>

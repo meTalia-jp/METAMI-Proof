@@ -1,5 +1,6 @@
 import { unified } from 'unified'
 import remarkParse from 'remark-parse'
+import { translate } from '../i18n'
 
 export type MarkdownStructureChangeKind =
   | 'heading-level' | 'heading-removed' | 'heading-added'
@@ -26,16 +27,16 @@ const parser = unified().use(remarkParse)
 const normalize = (value: string) => value.replace(/\s+/g, ' ').trim()
 const nodeText = (node: MdNode): string => node.value ?? node.children?.map(nodeText).join('') ?? ''
 const typeLabel = (type?: string) => {
-  if (!type) return 'なし'
-  if (type === 'paragraph') return '通常文章'
-  if (type.startsWith('heading-')) return `見出し${type.split('-')[1]}`
-  if (type === 'list-unordered') return '箇条書き'
-  if (type === 'list-ordered') return '番号付きリスト'
-  if (type === 'blockquote') return '引用'
-  if (type === 'code') return 'コードブロック'
-  if (type === 'link') return 'リンク'
-  if (type === 'strong') return '太字'
-  if (type === 'emphasis') return '強調'
+  if (!type) return translate('structure.type.none')
+  if (type === 'paragraph') return translate('structure.type.paragraph')
+  if (type.startsWith('heading-')) return translate('structure.type.heading', { level: type.split('-')[1] })
+  if (type === 'list-unordered') return translate('structure.type.unorderedList')
+  if (type === 'list-ordered') return translate('structure.type.orderedList')
+  if (type === 'blockquote') return translate('structure.type.blockquote')
+  if (type === 'code') return translate('structure.type.code')
+  if (type === 'link') return translate('structure.type.link')
+  if (type === 'strong') return translate('structure.type.strong')
+  if (type === 'emphasis') return translate('structure.type.emphasis')
   return type
 }
 
@@ -84,7 +85,7 @@ export function detectMarkdownStructureChanges(oldMarkdown: string, newMarkdown:
     oldTree = parser.parse(oldMarkdown) as MdNode
     newTree = parser.parse(newMarkdown) as MdNode
   } catch {
-    return [{ id: 'structure_parse_error', kind: 'parse-error', description: 'Markdown構造を確認できませんでした。変更内容を確認してください。' }]
+    return [{ id: 'structure_parse_error', kind: 'parse-error', description: translate('structure.parseError') }]
   }
 
   const oldData = collect(oldTree)
@@ -128,12 +129,12 @@ export function detectMarkdownStructureChanges(oldMarkdown: string, newMarkdown:
   oldData.blocks.forEach((before, index) => {
     if (oldUsed.has(index) || before.family === 'paragraph') return
     const afterType = 'paragraph'
-    changes.push({ id: `structure_${changes.length + 1}`, kind: changeKind(before.type, afterType), beforeType: before.type, afterType, beforeText: before.text, description: `「${before.text.slice(0, 40)}」 ${typeLabel(before.type)}が解除または削除されます` })
+    changes.push({ id: `structure_${changes.length + 1}`, kind: changeKind(before.type, afterType), beforeType: before.type, afterType, beforeText: before.text, description: translate('structure.removed', { text: before.text.slice(0, 40), type: typeLabel(before.type) }) })
   })
   newData.blocks.forEach((after, index) => {
     if (newUsed.has(index) || after.family === 'paragraph') return
     const beforeType = 'paragraph'
-    changes.push({ id: `structure_${changes.length + 1}`, kind: changeKind(beforeType, after.type), beforeType, afterType: after.type, afterText: after.text, description: `「${after.text.slice(0, 40)}」 ${typeLabel(after.type)}が追加されます` })
+    changes.push({ id: `structure_${changes.length + 1}`, kind: changeKind(beforeType, after.type), beforeType, afterType: after.type, afterText: after.text, description: translate('structure.added', { text: after.text.slice(0, 40), type: typeLabel(after.type) }) })
   })
 
   const compareInline = (type: InlineRecord['type']) => {
@@ -144,17 +145,17 @@ export function detectMarkdownStructureChanges(oldMarkdown: string, newMarkdown:
         const sameUrl = newItems.some(newItem => newItem.url === oldItem.url)
         if (sameUrl) return
         const sameText = newItems.find(newItem => newItem.text === oldItem.text)
-        if (sameText) changes.push({ id: `structure_${changes.length + 1}`, kind: 'link-changed', beforeType: 'link', afterType: 'link', beforeText: oldItem.url, afterText: sameText.url, description: `「${oldItem.text.slice(0, 40)}」 リンク先が変更されます` })
-        else if (normalize(newMarkdown).includes(oldItem.text)) changes.push({ id: `structure_${changes.length + 1}`, kind: 'link-changed', beforeType: 'link', afterType: 'paragraph', beforeText: oldItem.text, description: `「${oldItem.text.slice(0, 40)}」 リンクが解除されます` })
+        if (sameText) changes.push({ id: `structure_${changes.length + 1}`, kind: 'link-changed', beforeType: 'link', afterType: 'link', beforeText: oldItem.url, afterText: sameText.url, description: translate('structure.linkTargetChanged', { text: oldItem.text.slice(0, 40) }) })
+        else if (normalize(newMarkdown).includes(oldItem.text)) changes.push({ id: `structure_${changes.length + 1}`, kind: 'link-changed', beforeType: 'link', afterType: 'paragraph', beforeText: oldItem.text, description: translate('structure.linkRemoved', { text: oldItem.text.slice(0, 40) }) })
       })
       newItems.forEach(newItem => {
-        if (!oldItems.some(oldItem => oldItem.url === newItem.url) && !oldItems.some(oldItem => oldItem.text === newItem.text) && normalize(oldMarkdown).includes(newItem.text)) changes.push({ id: `structure_${changes.length + 1}`, kind: 'link-changed', beforeType: 'paragraph', afterType: 'link', afterText: newItem.text, description: `「${newItem.text.slice(0, 40)}」 リンクが追加されます` })
+        if (!oldItems.some(oldItem => oldItem.url === newItem.url) && !oldItems.some(oldItem => oldItem.text === newItem.text) && normalize(oldMarkdown).includes(newItem.text)) changes.push({ id: `structure_${changes.length + 1}`, kind: 'link-changed', beforeType: 'paragraph', afterType: 'link', afterText: newItem.text, description: translate('structure.linkAdded', { text: newItem.text.slice(0, 40) }) })
       })
       return
     }
     if (oldItems.length === newItems.length) return
-    if (oldItems.length > newItems.length) oldItems.filter(item => normalize(newMarkdown).includes(item.text)).slice(0, oldItems.length - newItems.length).forEach(item => changes.push({ id: `structure_${changes.length + 1}`, kind: type === 'strong' ? 'strong-changed' : 'emphasis-changed', beforeType: type, afterType: 'paragraph', beforeText: item.text, description: `「${item.text.slice(0, 40)}」 ${typeLabel(type)}が解除されます` }))
-    if (newItems.length > oldItems.length) newItems.filter(item => normalize(oldMarkdown).includes(item.text)).slice(0, newItems.length - oldItems.length).forEach(item => changes.push({ id: `structure_${changes.length + 1}`, kind: type === 'strong' ? 'strong-changed' : 'emphasis-changed', beforeType: 'paragraph', afterType: type, afterText: item.text, description: `「${item.text.slice(0, 40)}」 ${typeLabel(type)}が追加されます` }))
+    if (oldItems.length > newItems.length) oldItems.filter(item => normalize(newMarkdown).includes(item.text)).slice(0, oldItems.length - newItems.length).forEach(item => changes.push({ id: `structure_${changes.length + 1}`, kind: type === 'strong' ? 'strong-changed' : 'emphasis-changed', beforeType: type, afterType: 'paragraph', beforeText: item.text, description: translate('structure.formatRemoved', { text: item.text.slice(0, 40), type: typeLabel(type) }) }))
+    if (newItems.length > oldItems.length) newItems.filter(item => normalize(oldMarkdown).includes(item.text)).slice(0, newItems.length - oldItems.length).forEach(item => changes.push({ id: `structure_${changes.length + 1}`, kind: type === 'strong' ? 'strong-changed' : 'emphasis-changed', beforeType: 'paragraph', afterType: type, afterText: item.text, description: translate('structure.added', { text: item.text.slice(0, 40), type: typeLabel(type) }) }))
   }
   compareInline('link')
   compareInline('strong')

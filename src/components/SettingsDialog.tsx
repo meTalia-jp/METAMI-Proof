@@ -2,14 +2,16 @@ import { useEffect, useRef, useState } from 'react'
 import { APP_NAME, APP_VERSION } from '../config/app'
 import { useTranslation } from '../i18n'
 import type { TranslationKey } from '../i18n/ja'
-import type { AppTheme } from '../config/settings'
+import type { AppLocale, AppTheme } from '../config/settings'
 
 type SettingsDialogProps = {
   developerMode: boolean
   theme: AppTheme
+  locale: AppLocale
   canExportAiReview: boolean
   onDeveloperModeChange: (enabled: boolean) => void
   onThemeChange: (theme: AppTheme) => void
+  onLocaleChange: (locale: AppLocale) => void
   onOpenAiReviewExport: () => void
   onClose: () => void
 }
@@ -22,11 +24,6 @@ type SettingOption = {
   statusKey?: TranslationKey
 }
 
-const languageSettings: SettingOption[] = [
-  { labelKey: 'settings.japanese', valueKey: 'settings.inUse' },
-  { labelKey: 'settings.english', valueKey: 'settings.comingSoon', disabled: true, statusKey: 'settings.planned' },
-]
-
 function SettingRows({ items }: { items: SettingOption[] }) {
   const { t } = useTranslation()
   return <div className="settings-list">{items.map(item => <div className={`settings-row ${item.disabled ? 'disabled' : ''}`} key={item.labelKey} aria-disabled={item.disabled || undefined}>
@@ -37,7 +34,7 @@ function SettingRows({ items }: { items: SettingOption[] }) {
 
 const DEVELOPER_MODE_CLICK_COUNT = 15
 
-export function SettingsDialog({ developerMode, theme, canExportAiReview, onDeveloperModeChange, onThemeChange, onOpenAiReviewExport, onClose }: SettingsDialogProps) {
+export function SettingsDialog({ developerMode, theme, locale, canExportAiReview, onDeveloperModeChange, onThemeChange, onLocaleChange, onOpenAiReviewExport, onClose }: SettingsDialogProps) {
   const closeButtonRef = useRef<HTMLButtonElement>(null)
   const versionClickCountRef = useRef(0)
   const [notification, setNotification] = useState('')
@@ -79,7 +76,12 @@ export function SettingsDialog({ developerMode, theme, canExportAiReview, onDeve
           <button type="button" role="radio" aria-checked={theme === 'monochrome'} className={theme === 'monochrome' ? 'selected' : ''} onClick={() => onThemeChange('monochrome')}>{t('settings.monochrome')}</button>
         </div></div>
       </div></section>
-      <section className="settings-section" aria-labelledby="settings-language"><h3 id="settings-language">{t('settings.language')}</h3><SettingRows items={languageSettings} /></section>
+      <section className="settings-section" aria-labelledby="settings-language"><h3 id="settings-language">{t('settings.language')}</h3><div className="settings-list">
+        <div className="settings-row theme-setting-row"><strong>{t('settings.language')}</strong><div className="theme-options" role="radiogroup" aria-label={t('settings.language')}>
+          <button type="button" role="radio" aria-checked={locale === 'ja'} className={locale === 'ja' ? 'selected' : ''} onClick={() => onLocaleChange('ja')}>{t('settings.japanese')}</button>
+          <button type="button" role="radio" aria-checked={locale === 'en'} className={locale === 'en' ? 'selected' : ''} onClick={() => onLocaleChange('en')}>{t('settings.english')}</button>
+        </div></div>
+      </div></section>
       <section className="settings-section" aria-labelledby="settings-app"><h3 id="settings-app">{t('settings.appInfo')}</h3><div className="settings-list">
         <div className="settings-row"><strong>{t('settings.appName')}</strong><span className="settings-value">{APP_NAME}</span></div>
         <div className="settings-row"><strong>{t('settings.version')}</strong><button className="settings-value settings-version" type="button" onClick={handleVersionClick}>{APP_VERSION}</button></div>

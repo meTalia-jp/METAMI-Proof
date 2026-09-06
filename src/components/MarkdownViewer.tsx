@@ -1,7 +1,7 @@
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import type { DocumentSelection, HighlightAnnotation, RedPenAnnotation } from '../types/annotation'
-import { translate } from '../i18n'
+import { translate, type Locale } from '../i18n'
 import { getAttentionBadges, type AttentionBadge } from '../utils/attentionBadges'
 
 type MarkdownViewerProps = {
@@ -11,6 +11,7 @@ type MarkdownViewerProps = {
   selection?: DocumentSelection | null
   activeAnnotationId?: string | null
   mode: 'original' | 'draft'
+  locale?: Locale
 }
 
 type SourcePoint = { line?: number; column?: number; offset?: number }
@@ -64,8 +65,9 @@ function sourceSpan(value: string, sourceStart: number, sourceEnd: number, extra
   return elementNode('span', { 'data-source-start': sourceStart, 'data-source-end': sourceEnd, ...extra }, [textNode(value)])
 }
 
-function createSourcePositionPlugin(markdown: string, annotations: RedPenAnnotation[], highlights: HighlightAnnotation[], selection: DocumentSelection | null | undefined, activeAnnotationId: string | null | undefined, mode: 'original' | 'draft') {
+function createSourcePositionPlugin(markdown: string, annotations: RedPenAnnotation[], highlights: HighlightAnnotation[], selection: DocumentSelection | null | undefined, activeAnnotationId: string | null | undefined, mode: 'original' | 'draft', locale?: Locale) {
   return () => (tree: HastNode) => {
+    const t = (key: Parameters<typeof translate>[0], params?: Parameters<typeof translate>[1]) => translate(key, params, locale)
     const records: TextRecord[] = []
 
     const collect = (node: HastNode, parent?: HastNode) => {
@@ -134,19 +136,19 @@ function createSourcePositionPlugin(markdown: string, annotations: RedPenAnnotat
     }
 
     const badgeText = (badge: AttentionBadge) => {
-      if (badge.label === 'has_comment') return translate('badge.hasComment')
-      if (badge.label === 'proposal') return translate('badge.proposal')
-      if (badge.label === 'deletion_proposal') return translate('badge.deleteProposal')
+      if (badge.label === 'has_comment') return t('badge.hasComment')
+      if (badge.label === 'proposal') return t('badge.proposal')
+      if (badge.label === 'deletion_proposal') return t('badge.deleteProposal')
       const tagKeys = {
         question: 'tag.question', rewrite: 'tag.rewrite', delete: 'tag.delete',
         add: 'tag.add', fact_check: 'tag.fact_check', note: 'tag.note',
       } as const
-      return translate(tagKeys[badge.label])
+      return t(tagKeys[badge.label])
     }
     const badgeTitle = (badge: AttentionBadge, annotation: RedPenAnnotation | HighlightAnnotation) => {
       if (annotation.type === 'highlight') return annotation.comment ?? badgeText(badge)
       if (badge.kind === 'proposal') return annotation.replacementText ?? badgeText(badge)
-      if (badge.kind === 'deletion') return translate('badge.deleteProposal')
+      if (badge.kind === 'deletion') return t('badge.deleteProposal')
       return annotation.reviewText ?? annotation.replacementText ?? badgeText(badge)
     }
     const attentionBadgeNodes = (range: { id: string; anchor: RedPenAnnotation | HighlightAnnotation }) =>
@@ -190,6 +192,7 @@ function createSourcePositionPlugin(markdown: string, annotations: RedPenAnnotat
           if (range.kind === 'selection') {
             result.push(elementNode('mark', {
               className: ['document-selection', ...(firstRecord.get(range.id) === child ? ['selection-start'] : [])],
+              'data-label': t('viewer.selecting'),
               'data-selection': 'current',
               'data-source-start': partStart,
               'data-source-end': partEnd,
@@ -202,7 +205,7 @@ function createSourcePositionPlugin(markdown: string, annotations: RedPenAnnotat
               'data-review-type': 'highlight',
               'data-source-start': partStart,
               'data-source-end': partEnd,
-              'aria-label': range.anchor.comment ? `蛍光コメント：${range.anchor.comment}` : `${range.anchor.color === 'green' ? '緑' : '黄色'}蛍光`,
+              'aria-label': range.anchor.comment ? t('viewer.highlightComment', { comment: range.anchor.comment }) : t('viewer.highlight', { color: t(range.anchor.color === 'green' ? 'highlight.green' : 'highlight.yellow') }),
               title: range.anchor.comment ?? undefined,
               role: 'button',
               tabIndex: 0,
@@ -216,9 +219,9 @@ function createSourcePositionPlugin(markdown: string, annotations: RedPenAnnotat
             const reviewProperties = { 'data-review-id': range.id, 'data-review-type': 'correction' }
             const children = [elementNode('span', { className: ['del'], ...reviewProperties }, [textNode(visiblePart)])]
             if (lastRecord.get(range.id) === child) {
-              if (range.anchor.replacementText) children.push(elementNode('span', { className: ['ins'], 'aria-label': `本文案：${range.anchor.replacementText}`, ...reviewProperties }, [textNode(range.anchor.replacementText)]))
+              if (range.anchor.replacementText) children.push(elementNode('span', { className: ['ins'], 'data-label': t('viewer.insertMark'), 'aria-label': t('viewer.proposal', { text: range.anchor.replacementText }), ...reviewProperties }, [textNode(range.anchor.replacementText)]))
               children.push(...attentionBadgeNodes(range))
-              if (completed) children.push(elementNode('span', { className: ['annotation-complete-mark'], 'aria-label': '確認完了' }, [textNode('✓')]))
+              if (completed) children.push(elementNode('span', { className: ['annotation-complete-mark'], 'aria-label': t('viewer.completedAria') }, [textNode('✓')]))
             }
             result.push(elementNode('span', {
               className: ['red-pen-annotation', ...(completed ? ['is-completed'] : []), ...(activeAnnotationId === range.id ? ['is-active'] : [])],
@@ -230,7 +233,7 @@ function createSourcePositionPlugin(markdown: string, annotations: RedPenAnnotat
             }, children))
           } else {
             const children = [textNode(visiblePart)]
-            const markerText = range.anchor.status === 'completed_changed' ? '✓ 完了' : range.anchor.status === 'completed_unchanged' ? '変更なしで完了' : '未反映'
+            const markerText = range.anchor.status === 'completed_changed' ? t('viewer.completed') : range.anchor.status === 'completed_unchanged' ? t('viewer.completedUnchanged') : t('viewer.pending')
             if (lastRecord.get(range.id) === child) children.push(elementNode('span', { className: ['pending-marker', range.anchor.status] }, [textNode(markerText)]))
             result.push(elementNode('span', {
               className: ['pending-anchor', ...(range.anchor.status !== 'pending' ? ['is-completed'] : []), ...(activeAnnotationId === range.id ? ['is-active'] : [])],
@@ -255,15 +258,15 @@ function createSourcePositionPlugin(markdown: string, annotations: RedPenAnnotat
   }
 }
 
-export function MarkdownViewer({ markdown, annotations, highlights, selection, activeAnnotationId, mode }: MarkdownViewerProps) {
+export function MarkdownViewer({ markdown, annotations, highlights, selection, activeAnnotationId, mode, locale }: MarkdownViewerProps) {
   if (!markdown) {
     return (
       <div className="empty-document">
-        <span className="empty-symbol">文</span>
-        <p>Markdown文書を開くと、ここに紙面として表示されます。</p>
+        <span className="empty-symbol">{translate('viewer.emptySymbol', {}, locale)}</span>
+        <p>{translate('viewer.empty', {}, locale)}</p>
       </div>
     )
   }
 
-  return <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[createSourcePositionPlugin(markdown, annotations, highlights, selection, activeAnnotationId, mode)]}>{markdown}</ReactMarkdown>
+  return <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[createSourcePositionPlugin(markdown, annotations, highlights, selection, activeAnnotationId, mode, locale)]}>{markdown}</ReactMarkdown>
 }
